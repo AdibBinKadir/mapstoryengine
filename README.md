@@ -18,18 +18,18 @@ Each of the GameObjects is numbered to help you set up the project in the Inspec
 
 ## Quick start guide <a name="quickstart"></a>
 
-### Android credentials
+### Mobile credentials
 
-The Android project reads `GOOGLE_PLACES_API_KEY` and `MAPBOX_ACCESS_TOKEN` from the Unity Editor process environment. Set them before launching Unity. For local development, you can copy [the example configuration](Android_MapStoryEngine/.ardyssey.example.json) to `Android_MapStoryEngine/.ardyssey.local.json` and fill in the two values. Git ignores that file, and environment variables take precedence for each value.
+Both mobile projects read `GOOGLE_PLACES_API_KEY` and `MAPBOX_ACCESS_TOKEN` from the Unity Editor process environment. Set them before launching Unity. For local development, copy the example configuration for [Android](Android_MapStoryEngine/.ardyssey.example.json) or [iOS](iOS_MapStoryEngine/.ardyssey.example.json) to `.ardyssey.local.json` in the same project directory and fill in the two values. Git ignores the local file, and environment variables take precedence for each value.
 
-Enable **Places API (New)** in Google Cloud and restrict the Google key to that API. Use a public Mapbox token. The Android project reads both values from this configuration in place of the Inspector and the Mapbox Setup token field mentioned below.
+Enable **Places API (New)** in Google Cloud and restrict the Google key to that API. Use a public Mapbox token. Both projects now use this configuration in place of the Inspector and the Mapbox Setup token field mentioned below.
 
-Unity writes the two values into the generated Gradle project during an Android build. The APK contains client credentials, so use this setup for local testing. A production app should call Nearby Search through a backend that stores the Google key server-side. Keep APKs and exported Gradle projects with credentials out of Git and public artifacts.
+Unity writes the values into the generated Gradle or Xcode project during a build. The resulting apps contain client credentials, so use this setup for local testing. A production app should call Nearby Search through a backend that stores the Google key server-side. Keep exported mobile projects and builds with credentials out of Git and public artifacts.
 
 Before opening the project make sure that the required plugins were installed when you opened the project, and are using a suitable version of Unity. These are outlined in [Before starting](#sections).
 Despite the Map Story engine just consisting of a series of blank templates for each page of the app, a finished app can be built and uploaded to a mobile phone quickly to demonstrate the app's features. The steps to achieve this are as follows:
 1. Load the appropriate iOS or Android Unity project according to which device you want to use the app on and open the **MapStory** scene (Located under *Assets -> StoryEngine -> Scenes*).
-2. Enter your personal Mapbox ID under Unity's Mapbox menu (*Mapbox -> Setup*). If you do not have an ID already you can sign up for a free account through [Mapbox](https://account.mapbox.com/auth/signup/).
+2. Configure a public Mapbox token using the mobile credentials setup above. If you need a token, sign up for a [Mapbox account](https://account.mapbox.com/auth/signup/).
 
 ![Mapbox ID entry](Images/MapboxID.jpg)
 
@@ -39,9 +39,7 @@ Despite the Map Story engine just consisting of a series of blank templates for 
 
 &nbsp; - The maximum play area specified as a radius in metres (a multiple of 50), around the user's starting location.
 
-&nbsp; - Your personal Google Places key to connect to the Google Places API and search for local Points Of Interest (POIs). 
-
-If you do not have one already you can sign up for free account at [Google Maps](https://developers.google.com/maps). Be sure to check that the Places API is added/enabled on the Google project associated with the API key.
+Configure the Google Places key using the mobile credentials setup above. Enable **Places API (New)** on the Google Cloud project associated with the key.
 
 ![Searching Local Sites](Images/SearchSites.jpg)
 
