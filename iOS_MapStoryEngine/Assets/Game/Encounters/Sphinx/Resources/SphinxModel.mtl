@@ -1,0 +1,3 @@
+newmtl SphinxMat
+Kd 1 1 1
+map_Kd SphinxAlbedo.png

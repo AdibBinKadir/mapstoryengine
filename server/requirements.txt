@@ -1,0 +1,9 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+httpx>=0.27
+python-dotenv>=1.0
+numpy>=1.26
+# Head pose for /frame. Pulls in opencv-contrib-python (cv2). Needs Python 3.10-3.12.
+mediapipe>=0.10.14
+pytest>=8.0
