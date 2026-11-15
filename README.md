@@ -43,6 +43,7 @@ iPhone · Unity 2019.4 + AR Foundation/ARKit + Mapbox          Laptop · Python 
 ```
 
 ## Challenges we ran into
+- **Legacy Unity, for the first time.** None of us had used Unity 2019 before, and it took almost **6 hours** of trial and error just to get the app running on our iPhones: version-locked packages, Xcode export fixes, and AR plugins built for an older iOS.
 - **Face tracking on an old AR stack.** AR Foundation 3.1 can't simply switch to the front camera, so Medusa pauses rear AR, swaps the session to face tracking with the feed hidden, then restores AR exactly as it was.
 - **Speed.** Gemini's "thinking" models took over 15 s, past the phone's 8 s wait. Switching to Flash-Lite brought replies to about 1 s, with time held back for her voice.
 - **A 600,000-triangle Sphinx.** We cut the 3D scan to 10k triangles and re-baked its texture in Python so it runs smoothly on a phone.
