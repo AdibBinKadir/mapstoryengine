@@ -80,7 +80,7 @@ public class SphinxClient : MonoBehaviour
             clip.SetData(samples, 0);
             return clip;
         }
-        catch (FormatException e)
+        catch (Exception e)   // a bad WAV must never stop the encounter (e.g. the reveal timer)
         {
             Debug.LogWarning("[Sphinx] Can't read her voice: " + e.Message);
             return null;

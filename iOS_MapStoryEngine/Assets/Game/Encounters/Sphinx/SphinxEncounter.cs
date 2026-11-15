@@ -194,6 +194,9 @@ public class SphinxEncounter : MonoBehaviour, IEncounter
         var origin = FindObjectOfType<ARSessionOrigin>();
         if (origin != null) cam = origin.camera;
         if (cam == null) cam = Camera.main;
+        // Without a listener Unity plays no sound at all (the P2 sandbox's AR camera has none).
+        if (FindObjectOfType<AudioListener>() == null)
+            (cam != null ? cam.gameObject : gameObject).AddComponent<AudioListener>();
         Vector3 eye = cam != null ? cam.transform.position : Vector3.zero;
         Vector3 forward = cam != null ? Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up) : Vector3.forward;
         if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;

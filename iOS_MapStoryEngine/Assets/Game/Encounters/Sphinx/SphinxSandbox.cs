@@ -1,7 +1,7 @@
 using UnityEngine;
 
 // Sandbox controls for P2_Sphinx.unity: Begin / Practice / Abort, the server URL, and a log of what the
-// encounter tells the game. B = begin, A = abort.
+// encounter tells the game. No hotkeys: they would fire while typing an answer.
 [RequireComponent(typeof(SphinxEncounter))]
 public class SphinxSandbox : MonoBehaviour
 {
@@ -27,12 +27,6 @@ public class SphinxSandbox : MonoBehaviour
         GameEvents.ClueUnlocked -= OnClue;
         GameEvents.EncounterStarted -= OnStarted;
         GameEvents.EncounterEnded -= OnEnded;
-    }
-
-    void Update()
-    {
-        if (Input.GetKeyDown(KeyCode.B)) encounter.Begin();
-        if (Input.GetKeyDown(KeyCode.A)) encounter.Abort();
     }
 
     void OnClue(string text) { Log("clue unlocked: " + text); }
