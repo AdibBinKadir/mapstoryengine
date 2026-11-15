@@ -13,6 +13,7 @@ The team uses **Unity 2019.4.41f2 (LTS)**. Any other version will try to upgrade
    - **iOS Build Support** (only needed on a Mac building for iPhone)
 
 ## 2. Clone and open
+Also read **`UNITY.md`** for notes on the project upgrade.
 ```bash
 git clone https://github.com/AdibBinKadir/mapstoryengine.git
 ```
@@ -22,11 +23,11 @@ Then open `Assets/StoryEngine/Scenes/MapStory.unity`.
 > The repo has two copies of the project. **Pick one as a team and only work in that one.** Changes do not sync between them.
 
 ## 3. Add your API keys (never commit them)
-Both key files are gitignored.
-
-- **Mapbox token:** in Unity, go to *Mapbox → Setup* and paste your token. It is saved to `Assets/Resources/Mapbox/MapboxConfiguration.txt`, which is ignored.
-- **Google Places key:** create `Assets/Resources/Secrets/GooglePlacesKey.txt` with only the key inside it.
-  Leave the `API_KEY` field on **SearchLocalSites_12** *empty* in the Inspector. If you type it there, it gets saved into the scene file and pushed to GitHub.
+The project reads `GOOGLE_PLACES_API_KEY` and `MAPBOX_ACCESS_TOKEN` (details in `UNITY.md` and the README):
+1. Copy `Android_MapStoryEngine/.ardyssey.example.json` to `Android_MapStoryEngine/.ardyssey.local.json` (gitignored) and fill in both values. Environment variables take precedence if you set them.
+2. Google key: enable **Places API (New)** and restrict the key to that API. Mapbox: use a **public** token.
+3. **Don't** paste keys into the Inspector or the *Mapbox → Setup* window, because those get saved into tracked files.
+4. Never commit APKs or exported Gradle projects; they contain the keys.
 
 Before every commit, run `git diff --cached` and make sure no `AIza...` or `pk.ey...` strings are in it.
 
@@ -56,4 +57,4 @@ git config merge.unityyamlmerge.driver "'/Applications/Unity/Hub/Editor/2019.4.4
 ## 5. Testing on a phone
 - **Android:** turn on Developer Options and USB debugging, plug the phone in, then use *File → Build Settings → Android → Build And Run*. The phone needs ARCore support.
 - **iOS:** this requires a Mac with Xcode and an Apple ID for signing.
-- The app needs **location + camera** permissions, and you have to be outdoors near real places for Google Places to return sites.
+- The app needs **location + camera + microphone** permissions.

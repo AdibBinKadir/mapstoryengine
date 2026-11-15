@@ -158,7 +158,9 @@ namespace Mapbox.Unity
 
 #if !WINDOWS_UWP
 			var test = JsonUtility.FromJson<MapboxConfiguration>(ConfigurationJSON);
-			SetConfiguration(ConfigurationJSON == null ? null : test);
+			if (test != null)
+				test.AccessToken = ArdysseyCredentials.Load().MapboxAccessToken;
+			SetConfiguration(test);
 #else
 			SetConfiguration(ConfigurationJSON == null ? null : Mapbox.Json.JsonConvert.DeserializeObject<MapboxConfiguration>(ConfigurationJSON));
 #endif

@@ -1,138 +1,170 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-using UnityEngine.UI;
-
-using UnityEngine.Networking;
+﻿using System;
+using System.Collections;
+using System.Globalization;
 using System.Text;
-using System;
-using System.Linq;
+using UnityEngine;
+using UnityEngine.Networking;
 using SimpleJSON;
-
 using Mapbox.Unity.MeshGeneration.Factories;
 using Mapbox.Unity.Map;
 using Mapbox.Utils;
-using Mapbox.Unity.Utilities;
 
-// Use the Google Places API to look for local map sites of significance to use as part of the story
 public class SearchLocationsScript : MonoBehaviour
 {
-	// Variable to set number of map locations to visit during story
-	[Tooltip("Set the number of local sites that will be visited as part of the story")]
-	[Range(2, 20)]
-	public int noLocationsToVisit;
+    private const string NearbySearchUrl = "https://places.googleapis.com/v1/places:searchNearby";
+    private const string PlaceFields = "places.displayName,places.location,places.types";
 
-	// Variable to set the play area in metres around the user's starting position
-	[Tooltip("Set the search radius in metres as a multiple of 50 to look for map sites around the user's position")]
-	public string searchRadius = "250";
+    [Tooltip("Set the number of local sites that will be visited as part of the story")]
+    [Range(2, 20)]
+    public int noLocationsToVisit;
 
-	// User's Google API key
-	[Tooltip("Enter your Google API key")]
-    public string API_KEY = "";
+    [Tooltip("Set the search radius in metres around the user's position")]
+    public string searchRadius = "250";
 
-
-    // Google API Nearby Places url
-    private string Places_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json";
-
-    // Create an instance of the script
     public static SearchLocationsScript instance;
 
-    // Link to map object
-    [SerializeField]
-    private AbstractMap _map;
+    [SerializeField] private AbstractMap _map;
+    [SerializeField] private GameObject ARPlayerMapMarker;
+    [SerializeField] private GameObject StoryManager_15;
+    [SerializeField] private GameObject ProblemPanel_4;
 
-    // Link to map marker than displays user's current location
-    [SerializeField]
-    private GameObject ARPlayerMapMarker;
-
-    // Latitude and longitude of user's starting location
-    private string currentLat;
-    private string currentLong;
-    private Vector2d playerLatLong;
-
-    // JSON result from API request
     public JSONNode jsonResult;
+    public bool SearchComplete { get; private set; }
 
-    // Check if API request has been made
-    private bool localDataRequested = false;
-
-    // Confirm API reqsult has been received
-    private bool updatedInfo = false;
-
-    // Link to Story Manager object that controls the stoiry flow and movement between map sites
-    [SerializeField]
-    private GameObject StoryManager_15;
-
-    // Problem panel to load if not enough local map sites can be detected
-    [SerializeField]
-    private GameObject ProblemPanel_4;
-
-    // Create instance of script
     void Awake()
     {
-    	instance = this;
-
-        // Keep the key out of the scene file: if the Inspector field is empty,
-        // load it from Assets/Resources/Secrets/GooglePlacesKey.txt (gitignored)
-        if (string.IsNullOrEmpty(API_KEY))
-        {
-            TextAsset keyFile = Resources.Load<TextAsset>("Secrets/GooglePlacesKey");
-            if (keyFile != null)
-                API_KEY = keyFile.text.Trim();
-            else
-                Debug.LogWarning("No Google Places key found. Create Assets/Resources/Secrets/GooglePlacesKey.txt containing your key.");
-        }
+        instance = this;
     }
 
-    // Detect user's starting location and send request for local named map sites nearby
     void Start()
     {
-        playerLatLong = _map.WorldToGeoPosition(ARPlayerMapMarker.transform.position);
-        currentLat = playerLatLong.x.ToString();
-        currentLong = playerLatLong.y.ToString();
-
-        StartCoroutine(SearchNearbyPlaces(currentLat, currentLong));
+        Vector2d position = _map.WorldToGeoPosition(ARPlayerMapMarker.transform.position);
+        StartCoroutine(SearchNearbyPlaces(position));
     }
 
-    // Submit received API results to Story Manager
-    void Update()
+    private IEnumerator SearchNearbyPlaces(Vector2d position)
     {
-
-        // Nearby sites
-        if(updatedInfo == false && jsonResult != null)
+        string apiKey = ArdysseyCredentials.Load().GooglePlacesApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
+            ShowSearchProblem("Configure GOOGLE_PLACES_API_KEY for Places API (New).");
+            yield break;
+        }
+
+        double radius;
+        if (!double.TryParse(searchRadius, NumberStyles.Float, CultureInfo.InvariantCulture, out radius)
+            || !(radius > 0 && radius <= 50000))
+        {
+            ShowSearchProblem("Set a search radius greater than 0 and at most 50000 metres.");
+            yield break;
+        }
+
+        var body = new JSONObject
+        {
+            ["maxResultCount"] = 20,
+            ["rankPreference"] = "POPULARITY",
+            ["locationRestriction"] = new JSONObject
+            {
+                ["circle"] = new JSONObject
+                {
+                    ["center"] = new JSONObject
+                    {
+                        ["latitude"] = position.x,
+                        ["longitude"] = position.y
+                    },
+                    ["radius"] = radius
+                }
+            }
+        };
+
+        using (var request = new UnityWebRequest(NearbySearchUrl, UnityWebRequest.kHttpVerbPOST))
+        {
+            request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(body.ToString()));
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.timeout = 15;
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("X-Goog-Api-Key", apiKey);
+            request.redirectLimit = 0;
+            request.SetRequestHeader("X-Goog-FieldMask", PlaceFields);
+
+            yield return request.SendWebRequest();
+
+            if (request.isNetworkError || request.isHttpError)
+            {
+                string failure = request.isNetworkError
+                    ? "Could not reach Google Places. Check the connection."
+                    : $"Google Places returned HTTP {request.responseCode}. Check API enablement, key restrictions, billing, and quota.";
+                ShowSearchProblem(failure);
+                yield break;
+            }
+
+            JSONArray results;
+            try
+            {
+                results = ConvertPlaces(JSON.Parse(request.downloadHandler.text));
+            }
+            catch (Exception)
+            {
+                ShowSearchProblem("Google Places returned an unreadable response.");
+                yield break;
+            }
+
+            if (results.Count < noLocationsToVisit)
+            {
+                ShowSearchProblem($"Google Places returned {results.Count} usable places within {radius} m. The story needs {noLocationsToVisit}.");
+                yield break;
+            }
+
+            jsonResult = new JSONObject { ["results"] = results };
             StoryManager_15.GetComponent<StoryManager>().LocationsToVisit = jsonResult;
-            updatedInfo = true;
+            SearchComplete = true;
         }
-
-        // Not enough sites found
-        if(localDataRequested == true && (jsonResult == null || jsonResult["results"].Count < noLocationsToVisit))
-        {
-        	ProblemPanel_4.GetComponent<Problem>().enabled = true;
-            ProblemPanel_4.SetActive(true);
-        }
-
-        
     }
 
-    // Send API request and return JSON file
-    IEnumerator SearchNearbyPlaces(string lat, string lng)
+    // Keep the result shape StoryManager uses for stop selection.
+    private static JSONArray ConvertPlaces(JSONNode response)
     {
-        if(localDataRequested == false)
+        var results = new JSONArray();
+        var places = response?["places"] as JSONArray;
+        if (places == null)
+            return results;
+
+        foreach (JSONNode place in places.Children)
         {
-            UnityWebRequest webReq = new UnityWebRequest();
-            webReq.downloadHandler = new DownloadHandlerBuffer();
+            var displayName = place["displayName"] as JSONObject;
+            var location = place["location"] as JSONObject;
+            var types = place["types"] as JSONArray;
+            if (displayName == null || location == null || types == null || types.Count == 0)
+                continue;
 
-            webReq.url = string.Format("{0}?location={1},{2}&radius={3}&rankby=prominence&key={4}", Places_url, lat, lng, searchRadius, API_KEY);
+            string name = displayName["text"].Value;
+            if (string.IsNullOrWhiteSpace(name) || !location["latitude"].IsNumber
+                || !location["longitude"].IsNumber)
+                continue;
 
-            yield return webReq.SendWebRequest();
-
-            string rawJson = Encoding.Default.GetString(webReq.downloadHandler.data);
-            jsonResult = JSON.Parse(rawJson);
-
-            localDataRequested = true;
+            results.Add(new JSONObject
+            {
+                ["name"] = name,
+                ["types"] = types,
+                ["geometry"] = new JSONObject
+                {
+                    ["location"] = new JSONObject
+                    {
+                        ["lat"] = location["latitude"],
+                        ["lng"] = location["longitude"]
+                    }
+                }
+            });
         }
 
+        return results;
     }
 
+    private void ShowSearchProblem(string message)
+    {
+        Debug.LogWarning(message, this);
+        ProblemPanel_4.GetComponent<Problem>().enabled = true;
+        ProblemPanel_4.SetActive(true);
+        SearchComplete = true;
+    }
 }

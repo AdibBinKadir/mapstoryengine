@@ -17,6 +17,15 @@ Each of the GameObjects is numbered to help you set up the project in the Inspec
 8. [Contact](#contact)
 
 ## Quick start guide <a name="quickstart"></a>
+
+### Android credentials
+
+The Android project reads `GOOGLE_PLACES_API_KEY` and `MAPBOX_ACCESS_TOKEN` from the Unity Editor process environment. Set them before launching Unity. For local development, you can copy [the example configuration](Android_MapStoryEngine/.ardyssey.example.json) to `Android_MapStoryEngine/.ardyssey.local.json` and fill in the two values. Git ignores that file, and environment variables take precedence for each value.
+
+Enable **Places API (New)** in Google Cloud and restrict the Google key to that API. Use a public Mapbox token. The Android project reads both values from this configuration in place of the Inspector and the Mapbox Setup token field mentioned below.
+
+Unity writes the two values into the generated Gradle project during an Android build. The APK contains client credentials, so use this setup for local testing. A production app should call Nearby Search through a backend that stores the Google key server-side. Keep APKs and exported Gradle projects with credentials out of Git and public artifacts.
+
 Before opening the project make sure that the required plugins were installed when you opened the project, and are using a suitable version of Unity. These are outlined in [Before starting](#sections).
 Despite the Map Story engine just consisting of a series of blank templates for each page of the app, a finished app can be built and uploaded to a mobile phone quickly to demonstrate the app's features. The steps to achieve this are as follows:
 1. Load the appropriate iOS or Android Unity project according to which device you want to use the app on and open the **MapStory** scene (Located under *Assets -> StoryEngine -> Scenes*).

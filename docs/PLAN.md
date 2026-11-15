@@ -12,7 +12,7 @@
 ## 1. Game design
 
 ### The world
-- **Open world, closed map.** All locations are **fixed coordinates** in `GameConfig`: Troy (start), Ithaca (hidden goal), the Sphinx, the Cyclops' cave, and Hydra zones. Medusa isn't tied to a location. This means we **don't need Google Places** for POIs anymore.
+- **Open world, closed map.** All locations are **fixed coordinates** in `GameConfig`: Troy (start), Ithaca (hidden goal), the Sphinx, the Cyclops' cave, and Hydra zones. Medusa isn't tied to a location. Google Places (already migrated in `UNITY.md`) is then optional: keep it only if we want real place names in clues or the Sphinx's lines.
 - **Default screen = back-camera AR view** with a HUD: HP bar, clue journal button, and map button (the mapstoryengine map, opened as a toggle).
 - **Win:** walk within 20 m of Ithaca. Clues are how you figure out where that is.
 - **Death:** from STONED, poison or the Cyclops. You see a death screen, then you must **walk to a respawn point** to restore full HP. *TBD: which respawn point. Proposal: the nearest of 2–3 "ships"; Troy is always one.*
@@ -53,7 +53,7 @@ P1 is the only experienced Unity dev, so P1 **does not build big features**. P1 
 
 | Role | Unity? | Owns (folders) | Builds |
 |---|---|---|---|
-| **P1: Unity Lead** | Yes (experienced) | `MapStory.unity`, `Assets/Game/CameraMode/`, `Assets/Game/Encounters/Medusa/`, `Assets/Game/Net/CvClient*`, `ProjectSettings/`, `Packages/` | 1) The original app building to an Android phone. 2) **Camera switch** (pause rear AR → hidden front camera → resume). 3) `CvClient` (frames → server). 4) **Medusa's** hijack screen and STONED logic. 5) Adding the `GameSystems` prefab to the scene once. 6) The APK at every checkpoint. |
+| **P1: Unity Lead** | Yes (experienced) | `MapStory.unity`, `Assets/Game/CameraMode/`, `Assets/Game/Encounters/Medusa/`, `Assets/Game/Net/CvClient*`, `ProjectSettings/`, `Packages/` | 1) A fresh APK on a real phone with the new Places + credentials code (still unverified per `UNITY.md`). 2) **Camera switch** (pause rear AR → hidden front camera → resume). 3) `CvClient` (frames → server). 4) **Medusa's** hijack screen and STONED logic. 5) Adding the `GameSystems` prefab to the scene once. 6) The APK at every checkpoint. |
 | **P2: World & Hydra** | Yes (learning, agent-driven) | `Assets/Game/Core/`, `Assets/Game/Encounters/Hydra/`, `Assets/Game/UI/` | `GameState` (HP, poison, death, walking to respawn, win at Ithaca), `ClueBook` (tiers, periodic vague clues, journal UI), `WorldMap` (fixed locations and zone checks), **Demo Mode** (teleport buttons and an encounter trigger panel), HUD, the full **Hydra**. Also creates the contract stubs in hour 1. |
 | **P3: Server & Content** | **No** | `server/`, `Assets/Game/Core/Clues.json` (content only) | The Python server: `/frame` (MediaPipe head pose → `looking_at_screen`) plus a webcam test tool; `/sphinx` and `/sphinx/talk` (speech-to-text + LLM). Writes the **clue list** with the team. Then the Medusa/Sphinx media assets, the Devpost write-up, the video and the pitch. |
 | **P4: Cyclops & Sphinx** | Yes (learning, agent-driven) | `Assets/Game/Encounters/Cyclops/`, `Assets/Game/Encounters/Sphinx/`, `Assets/Game/Net/SphinxClient*` | **The Cyclops boss fight** (AR placement, sleep/awake state machine, tap attacks, shield via phone height, telegraphs, win/lose). **The Sphinx in Unity** (AR placement, Speak button + mic recording + WAV, showing replies). |

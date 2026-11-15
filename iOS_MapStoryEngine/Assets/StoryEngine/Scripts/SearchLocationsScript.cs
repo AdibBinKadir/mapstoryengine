@@ -71,17 +71,6 @@ public class SearchLocationsScript : MonoBehaviour
     void Awake()
     {
     	instance = this;
-
-        // Keep the key out of the scene file: if the Inspector field is empty,
-        // load it from Assets/Resources/Secrets/GooglePlacesKey.txt (gitignored)
-        if (string.IsNullOrEmpty(API_KEY))
-        {
-            TextAsset keyFile = Resources.Load<TextAsset>("Secrets/GooglePlacesKey");
-            if (keyFile != null)
-                API_KEY = keyFile.text.Trim();
-            else
-                Debug.LogWarning("No Google Places key found. Create Assets/Resources/Secrets/GooglePlacesKey.txt containing your key.");
-        }
     }
 
     // Detect user's starting location and send request for local named map sites nearby

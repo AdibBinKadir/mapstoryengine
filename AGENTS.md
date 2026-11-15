@@ -1,6 +1,6 @@
 # Agent Instructions (shared by Claude Code and Codex, so keep one copy)
 
-Read `docs/PLAN.md` (roles, timeline, mechanic specs) and `docs/CONTRACTS.md` (APIs and interfaces) before doing anything.
+Read `docs/PLAN.md` (roles, timeline, mechanic specs), `docs/CONTRACTS.md` (APIs and interfaces) and `UNITY.md` (project upgrade notes and credentials) before doing anything.
 
 ## Project
 Odyssey AR: an open-world, closed-map AR game built on mapstoryengine. Start at Troy and find the hidden Ithaca using clues. Hackathon, about 18 hours, 4 people.
@@ -35,8 +35,9 @@ Odyssey AR: an open-world, closed-map AR game built on mapstoryengine. Start at 
 
 ## Unity + git rules
 - **Every new asset (including `.cs`) must be committed together with its `.meta` file, and the `.meta` must come from Unity.** After creating files, the human must focus the Unity Editor so it imports them, then commit the `.cs` and `.meta` together. Never hand-write or regenerate `.meta` files or GUIDs.
-- Don't commit `Library/`, `Temp/`, `Logs/`, builds, or API keys. The Google Places key goes in `Assets/Resources/Secrets/GooglePlacesKey.txt` (gitignored). The Mapbox token goes in through *Mapbox → Setup*. The LLM key goes in `server/.env` (gitignored).
+- Don't commit `Library/`, `Temp/`, `Logs/`, builds/APKs, or API keys. Unity keys come from `ArdysseyCredentials` (env vars or the gitignored `Android_MapStoryEngine/.ardyssey.local.json`; see `UNITY.md`). Never put keys in the Inspector, scenes or `MapboxConfiguration.txt`. The server's LLM and speech keys go in `server/.env` (gitignored).
 - Each feature must be testable **without the main scene and without the server**. Use the mocks (`KeyboardFaceSignals`, server `--fake`, debug-panel event buttons).
+- **MCP for Unity** is installed (see `UNITY.md`). While the Editor is open, agents can connect to `http://127.0.0.1:6500/mcp` to check compile errors, read the console and inspect the scene. Still **never save `MapStory.unity` through MCP** unless you're P1.
 - **Compile check without opening the editor:** with the Editor closed, run
   `"<UnityPath>/Editor/Unity.exe" -batchmode -nographics -quit -projectPath Android_MapStoryEngine -logFile -` and look for `error CS`.
 - Server: `python -m pytest server` must pass before you open a PR.

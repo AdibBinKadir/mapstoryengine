@@ -82,16 +82,20 @@ public class Title : MonoBehaviour
 
     }
 
-    // Pause for 5 seconds as local site search performed
+    // Wait until the search has finished before starting the story manager.
     IEnumerator PauseForSearch()
     {
         if(searchVar == false)
         {
             searchVar = true;
-            yield return new WaitForSeconds(5.0f);
+            var search = SearchLocalSites_12.GetComponent<SearchLocationsScript>();
+            yield return new WaitUntil(() => search.SearchComplete);
+
+            SearchingText_1_4.transform.gameObject.SetActive(false);
+            if (search.jsonResult == null)
+                yield break;
 
             StoryManager_15.GetComponent<StoryManager>().enabled = true;
-            SearchingText_1_4.transform.gameObject.SetActive(false);
 
             yield return new WaitForSeconds(1.0f);
 
