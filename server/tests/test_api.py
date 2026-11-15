@@ -6,7 +6,7 @@ import wave
 from server import sphinx, stt
 
 STATE = {"event": "intro", "hp": 40, "max_hp": 100, "deaths": 2, "last_event": "stoned",
-         "riddle_index": 1, "riddle_answer": "Central Library"}
+         "riddle_index": 0, "correct_count": 0}
 
 
 def wav_bytes(seconds=1.0):
@@ -42,10 +42,10 @@ def test_frame_rejects_empty_body(client):
     assert client.post("/frame", content=b"").status_code == 400
 
 
-def test_sphinx_intro_has_riddle_without_answer(client):
-    body = client.post("/sphinx", json=STATE).json()
-    assert body["line"]
-    assert body["riddle"] and "library" not in body["riddle"].lower()
+def test_sphinx_intro_has_riddle_and_index(client):
+    body = client.post("/sphinx", json=dict(STATE, riddle_index=-1)).json()
+    assert body["line"] and body["riddle"]
+    assert body["riddle"] == sphinx.RIDDLES[body["riddle_index"]]["question"]
 
 
 def test_sphinx_taunt_has_no_riddle(client):
@@ -59,13 +59,18 @@ def test_sphinx_accepts_unity_style_state(client):
 
 
 def test_talk_fake_cycles_through_all_three_outcomes(client):
-    outcomes = [talk(client).json()["answer_correct"] for _ in range(3)]
-    assert sorted(outcomes, key=str) == sorted([None, False, True], key=str)
+    verdicts = [talk(client).json()["verdict"] for _ in range(3)]
+    assert sorted(verdicts) == ["correct", "none", "wrong"]
+
+
+def test_talk_reply_shape(client):
+    body = talk(client, text="hello").json()
+    assert set(body) >= {"heard", "line", "riddle", "riddle_index", "answer_correct", "verdict", "reveal"}
 
 
 def test_talk_typed_text(client):
-    body = talk(client, text="is it the centrall libary").json()
-    assert body["heard"] == "is it the centrall libary" and body["answer_correct"] is True
+    body = talk(client, text="is it a humman").json()
+    assert body["heard"] == "is it a humman" and body["verdict"] == "correct" and body["reveal"] is False
 
 
 def test_talk_needs_audio_or_text(client):
@@ -78,12 +83,12 @@ def test_talk_rejects_bad_state(client):
 
 
 def test_talk_real_mode_stt_then_llm(client, real_mode, monkeypatch):
-    monkeypatch.setattr(stt, "transcribe", lambda wav, deadline: "is it the central library")
+    monkeypatch.setattr(stt, "transcribe", lambda wav, deadline: "is it a man")
     monkeypatch.setattr(sphinx, "call_gemini", lambda prompt, timeout: {
         "line": "Ugh. Fine.", "answer_attempted": True, "answer_correct": True, "repeat_riddle": False})
     body = talk(client).json()
-    assert body == {"heard": "is it the central library", "line": "Ugh. Fine.",
-                    "riddle": None, "answer_correct": True}
+    assert body["heard"] == "is it a man" and body["line"] == "Ugh. Fine." and body["verdict"] == "correct"
+    assert body["riddle_index"] != 0 and body["riddle"] == sphinx.RIDDLES[body["riddle_index"]]["question"]
 
 
 def test_talk_real_mode_survives_stt_and_llm_failure(client, real_mode, monkeypatch):
@@ -96,4 +101,4 @@ def test_talk_real_mode_survives_stt_and_llm_failure(client, real_mode, monkeypa
     monkeypatch.setattr(stt, "transcribe", broken_stt)
     monkeypatch.setattr(sphinx, "call_gemini", broken_llm)
     body = talk(client).json()
-    assert body["heard"] == "" and body["line"] in sphinx.DEAF_LINES and body["answer_correct"] is None
+    assert body["heard"] == "" and body["line"] in sphinx.DEAF_LINES and body["verdict"] == "none"

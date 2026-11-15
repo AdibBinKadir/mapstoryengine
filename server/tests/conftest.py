@@ -9,7 +9,7 @@ for name in ("GEMINI_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY"):
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from server import config, main, sphinx  # noqa: E402
+from server import config, main  # noqa: E402
 
 
 @pytest.fixture
@@ -22,6 +22,4 @@ def real_mode(monkeypatch):
     """Non-fake mode with fake keys; tests monkeypatch the network calls themselves."""
     monkeypatch.setattr(config.settings, "fake", False)
     monkeypatch.setattr(config.settings, "gemini_api_key", "test")
-    sphinx._riddles.clear()
     yield
-    sphinx._riddles.clear()

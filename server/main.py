@@ -30,8 +30,9 @@ class SphinxState(BaseModel):
     max_hp: int = 100
     deaths: int = 0
     last_event: Optional[str] = None
-    riddle_index: int = 0
-    riddle_answer: str = ""
+    riddle_index: int = -1      # the current riddle in sphinx.RIDDLES; -1 before the intro
+    correct_count: int = 0      # correct answers so far (two -> the reveal)
+    riddle_answer: str = ""     # legacy, ignored
 
 
 def _detector():
@@ -111,6 +112,6 @@ def sphinx_talk(
                 log.warning("speech-to-text failed: %s", e)
                 heard = ""
         reply = sphinx.talk(heard, data, deadline)
-    log.info("/sphinx/talk heard=%r correct=%s -> %r (%.1fs)", reply["heard"], reply["answer_correct"],
+    log.info("/sphinx/talk heard=%r verdict=%s reveal=%s -> %r (%.1fs)", reply["heard"], reply["verdict"], reply["reveal"],
              reply["line"], time.monotonic() - started)
     return reply
