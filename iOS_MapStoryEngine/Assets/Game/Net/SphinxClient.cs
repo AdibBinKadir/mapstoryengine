@@ -17,7 +17,8 @@ public class SphinxClient : MonoBehaviour
         get
         {
             string url = Services.Config != null ? Services.Config.serverUrl : null;
-            if (string.IsNullOrEmpty(url)) url = PlayerPrefs.GetString(UrlPrefKey, DefaultUrl);
+            if (string.IsNullOrEmpty(url))
+                url = PlayerPrefs.GetString(UrlPrefKey, Application.isEditor ? "http://127.0.0.1:8000" : DefaultUrl);
             return url.Trim().TrimEnd('/');
         }
         set
