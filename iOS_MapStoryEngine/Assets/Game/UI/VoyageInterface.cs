@@ -14,7 +14,7 @@ namespace Odyssey
         private enum Page { None, Oracle, Clues, Rules, Locations }
 
         private static readonly string[] PageNames = { "", "Oracle", "Clues", "Rules", "Included Locations" };
-        private const string Rules = "Stop walking before looking at your phone. Explore nearby sites and the Cyclops Cave on the chart.\n\nRaise your phone to shield. Match the gold flash for a perfect block, then tap the exposed Cyclops.\n\nYour journal keeps earned clues. Your health carries over.";
+        private const string Rules = "Stop walking before looking at your phone. Find Cyclops and Medusa on the chart.\n\nRaise your phone to shield. Match the gold flash for a perfect block, then tap the exposed Cyclops.\n\nWhen Medusa appears, look away or close your eyes. Your journal keeps earned clues.";
 
         private RectTransform safeArea;
         private RectTransform landingSafeArea;
@@ -35,8 +35,10 @@ namespace Odyssey
         private Camera rearCamera;
         private VoyageRoute route;
         private UnityAction practice;
+        private UnityAction practiceMedusa;
         private Func<bool> caveDiscovered;
         private Func<bool> caveCleared;
+        private Func<bool> medusaCleared;
         private Page page;
         private bool launching;
         private bool fighting;
@@ -48,7 +50,8 @@ namespace Odyssey
         private UnityAction pageAction;
 
         internal static VoyageInterface Create(ARSession session, Camera camera, VoyageRoute route,
-            UnityAction practice, Func<bool> caveDiscovered, Func<bool> caveCleared)
+            UnityAction practice, UnityAction practiceMedusa, Func<bool> caveDiscovered,
+            Func<bool> caveCleared, Func<bool> medusaCleared)
         {
             var owner = new GameObject("Return to Ithaca UI", typeof(RectTransform));
             var ui = owner.AddComponent<VoyageInterface>();
@@ -57,8 +60,10 @@ namespace Odyssey
             ui.cameraManager = camera.GetComponent<ARCameraManager>();
             ui.route = route;
             ui.practice = practice;
+            ui.practiceMedusa = practiceMedusa;
             ui.caveDiscovered = caveDiscovered;
             ui.caveCleared = caveCleared;
+            ui.medusaCleared = medusaCleared;
             ui.Build(owner);
             if (VoyageState.Started)
                 ui.Play();
@@ -93,7 +98,7 @@ namespace Odyssey
             FitScreen();
 
             session.enabled = false;
-            rearCamera.enabled = false;
+            rearCamera.enabled = true;
             rearCamera.backgroundColor = OdysseyTheme.Ink;
             if (cameraManager != null)
                 cameraManager.enabled = false;
@@ -141,6 +146,14 @@ namespace Odyssey
                 new Vector2(-100, -134), new Vector2(100, -78));
             OdysseyTheme.Button(play, Play, true);
             OdysseyTheme.Label(OdysseyTheme.Inset(play, "Play label", 5), "Play", 24, OdysseyTheme.Ink);
+            var cyclopsTest = OdysseyTheme.Rect(landingSafe, "Test Cyclops", center, center,
+                new Vector2(-122, -189), new Vector2(-5, -145));
+            OdysseyTheme.Button(cyclopsTest, () => StartCoroutine(StartPractice(practice)));
+            OdysseyTheme.Label(OdysseyTheme.Inset(cyclopsTest, "Label", 4), "Test Cyclops", 16, OdysseyTheme.Ivory);
+            var medusaTest = OdysseyTheme.Rect(landingSafe, "Test Medusa", center, center,
+                new Vector2(5, -189), new Vector2(122, -145));
+            OdysseyTheme.Button(medusaTest, () => StartCoroutine(StartPractice(practiceMedusa)));
+            OdysseyTheme.Label(OdysseyTheme.Inset(medusaTest, "Label", 4), "Test Medusa", 16, OdysseyTheme.Ivory);
             landing.alpha = 0;
             StartCoroutine(FadeInLanding());
         }
@@ -240,7 +253,7 @@ namespace Odyssey
 
         private void Play()
         {
-            if (launching)
+            if (launching || fighting)
                 return;
             launching = true;
             VoyageState.Begin();
@@ -249,6 +262,37 @@ namespace Odyssey
         }
 
         private IEnumerator StartCamera()
+        {
+            yield return EnableCamera();
+            healthRoot.gameObject.SetActive(true);
+            SetVisible(navigation, true);
+
+            while (landing.alpha > 0)
+            {
+                landing.alpha = Mathf.MoveTowards(landing.alpha, 0, Time.unscaledDeltaTime * 3.5f);
+                yield return null;
+            }
+            landing.gameObject.SetActive(false);
+            launching = false;
+        }
+
+        private IEnumerator StartPractice(UnityAction encounter)
+        {
+            if (launching || fighting)
+                yield break;
+
+            launching = true;
+            bool fromHome = !VoyageState.Started;
+            if (fromHome)
+                yield return EnableCamera();
+            launching = false;
+            if (cameraUnavailable)
+                yield break;
+
+            encounter();
+        }
+
+        private IEnumerator EnableCamera()
         {
 #if UNITY_IOS
             if (Application.platform == RuntimePlatform.IPhonePlayer)
@@ -276,23 +320,26 @@ namespace Odyssey
             session.enabled = !cameraUnavailable;
             if (cameraManager != null)
                 cameraManager.enabled = !cameraUnavailable;
-            healthRoot.gameObject.SetActive(true);
-            SetVisible(navigation, true);
-
-            while (landing.alpha > 0)
-            {
-                landing.alpha = Mathf.MoveTowards(landing.alpha, 0, Time.unscaledDeltaTime * 3.5f);
-                yield return null;
-            }
-            landing.gameObject.SetActive(false);
+            yield break;
         }
 
-        internal void SetEncounter(bool active, bool practiceFight = false)
+        internal void SetEncounter(bool active, bool practiceFight = false, bool fullScreen = false)
         {
             fighting = active;
+            if (!VoyageState.Started)
+            {
+                SetVisible(landing, !active);
+                if (!active)
+                {
+                    session.enabled = false;
+                    if (cameraManager != null) cameraManager.enabled = false;
+                }
+                return;
+            }
+
             Open(Page.None);
             navigation.blocksRaycasts = navigation.interactable = !active;
-            healthRoot.gameObject.SetActive(!active || !practiceFight);
+            healthRoot.gameObject.SetActive(!active || !(practiceFight || fullScreen));
         }
 
         private void Open(Page next)
@@ -328,10 +375,10 @@ namespace Odyssey
                             SceneManager.LoadScene(gameObject.scene.buildIndex);
                         };
                     }
-                    else if (caveCleared())
+                    else if (caveCleared() && medusaCleared())
                         message = "The guardian has fallen. Read your journal and choose where to explore next.";
                     else if (caveDiscovered())
-                        message = "The cave is marked on your chart. Approach it with a steady GPS reading to enter. Guard against the gold flash.";
+                        message = "Cyclops and Medusa are marked on your chart. Approach either to enter.";
                     else
                         message = "The way home begins with the places around you. Consult Included Locations and choose where to explore.";
                     break;
@@ -346,7 +393,7 @@ namespace Odyssey
                         pageAction = () => { Open(Page.None); practice(); };
                     break;
                 default:
-                    message = route.Locations(caveDiscovered(), caveCleared());
+                    message = route.Locations(caveDiscovered(), caveCleared(), medusaCleared());
                     label = route.ShowingChart ? "Return to AR" : "Open chart";
                     if (route.CanToggle)
                         pageAction = () => { Open(Page.None); route.Toggle(); };

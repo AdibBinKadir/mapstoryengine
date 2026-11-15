@@ -192,7 +192,7 @@ PlayerSettings:
   StripUnusedMeshComponents: 1
   VertexChannelCompressionMask: 4054
   iPhoneSdkVersion: 988
-  iOSTargetOSVersionString: 11.0
+  iOSTargetOSVersionString: 15.0
   tvOSSdkVersion: 0
   tvOSRequireExtendedGameController: 0
   tvOSTargetOSVersionString: 10.0
@@ -472,7 +472,8 @@ PlayerSettings:
   enableInternalProfiler: 0
   logObjCUncaughtExceptions: 1
   enableCrashReportAPI: 0
-  cameraUsageDescription: Please enable as this game uses Augmented Reality
+  cameraUsageDescription: Return to Ithaca uses the rear camera for augmented reality
+    and the front camera to track your face during the Medusa encounter.
   locationUsageDescription: Please enable as this game uses your current location
   microphoneUsageDescription: 
   switchNetLibKey: 

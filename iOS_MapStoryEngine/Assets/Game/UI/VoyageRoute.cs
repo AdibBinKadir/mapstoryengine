@@ -133,7 +133,7 @@ namespace Odyssey
             mapToolsVisibility.blocksRaycasts = visible;
         }
 
-        internal string Locations(bool caveDiscovered, bool caveCleared)
+        internal string Locations(bool bossesDiscovered, bool caveCleared, bool medusaCleared)
         {
             var locations = new List<string>();
             if (Ready && story.MapSites != null)
@@ -141,8 +141,11 @@ namespace Odyssey
                     if (site != null)
                         locations.Add(site.name);
 
-            if (caveDiscovered)
+            if (bossesDiscovered)
+            {
                 locations.Add(caveCleared ? "Cyclops Cave (cleared)" : "Cyclops Cave");
+                locations.Add(medusaCleared ? "Medusa (cleared)" : "Medusa");
+            }
             if (locations.Count > 0)
                 return string.Join("\n\n", locations);
             if (!requested)
