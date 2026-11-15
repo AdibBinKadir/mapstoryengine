@@ -26,6 +26,7 @@ The project reads `GOOGLE_PLACES_API_KEY` and `MAPBOX_ACCESS_TOKEN` (details in 
 2. Google key: enable **Places API (New)** and restrict the key to that API. Mapbox: use a **public** token.
 3. **Don't** paste keys into the Inspector or the *Mapbox → Setup* window, because those get saved into tracked files.
 4. Never commit Xcode exports or app bundles; they contain the keys.
+5. Set up the [Oracle and Sphinx server](server/README.md) with `server/.env`. For iPhone testing, configure the same HTTPS endpoint for both features. The local `OracleEndpoint.txt` and its Unity-generated `.meta` are ignored by Git.
 
 Before every commit, run `git diff --cached` and make sure no `AIza...` or `pk.ey...` strings are in it.
 

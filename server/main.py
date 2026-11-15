@@ -1,131 +1,94 @@
-"""Odyssey AR laptop server. API: docs/CONTRACTS.md section A.
+"""WSGI proxy for the Unity Oracle. Run locally with python -m server.main."""
 
-Run:  uvicorn server.main:app --host 0.0.0.0 --port 8000   (FAKE=1 for canned replies)
-  or: python -m server [--fake]
-"""
-import base64
+from collections import deque
 import json
-import logging
-import time
-from typing import Optional
+from threading import BoundedSemaphore, Lock
+from time import monotonic
+from wsgiref.simple_server import WSGIRequestHandler, make_server
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from pydantic import BaseModel
-
-from . import config, sphinx, stt, tts
-from .gaze import GazeDetector, GazeUnavailable
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-log = logging.getLogger("server")
-
-MAX_FRAME_BYTES = 2 * 1024 * 1024
-MAX_AUDIO_BYTES = 4 * 1024 * 1024  # 8 s of 16 kHz mono 16-bit is ~256 KB
-
-app = FastAPI(title="Odyssey AR server")
-_gaze = None
+from .oracle import FACTS, REFUSAL, OracleUnavailable, answer, classify, gemini
 
 
-class SphinxState(BaseModel):
-    event: str = "intro"
-    hp: int = 100
-    max_hp: int = 100
-    deaths: int = 0
-    last_event: Optional[str] = None
-    riddle_index: int = -1      # the current riddle in sphinx.RIDDLES; -1 before the intro
-    correct_count: int = 0      # correct answers so far (two -> the reveal)
-    riddle_answer: str = ""     # legacy, ignored
+class OracleBudget:
+    def __init__(self):
+        self.calls = deque()
+        self.lock = Lock()
+
+    def reserve(self, client):
+        with self.lock:
+            now = monotonic()
+            while self.calls and self.calls[0][0] <= now - 60:
+                self.calls.popleft()
+            if len(self.calls) >= 30 or sum(ip == client for _, ip in self.calls) >= 12:
+                return False
+            self.calls.append((now, client))
+            return True
 
 
-def _detector():
-    global _gaze
-    if _gaze is None:
-        s = config.settings
-        _gaze = GazeDetector(s.gaze_yaw_max, s.gaze_pitch_max, s.gaze_smooth_frames)
-    return _gaze
+def create_app(generate=gemini):
+    budget = OracleBudget()
+    slots = BoundedSemaphore(4)
 
+    def application(environ, start_response):
+        def respond(status, payload, headers=()):
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            start_response(status, [("Content-Type", "application/json; charset=utf-8"),
+                                    ("Cache-Control", "no-store"), ("Content-Length", str(len(body))), *headers])
+            return [body]
 
-def _deadline():
-    return time.monotonic() + config.settings.request_budget_s
+        if environ["PATH_INFO"] != "/oracle":
+            return respond("404 Not Found", {"error": "not_found"})
+        if environ["REQUEST_METHOD"] != "POST":
+            return respond("405 Method Not Allowed", {"error": "method"}, [("Allow", "POST")])
+        if environ.get("CONTENT_TYPE", "").split(";")[0].strip().lower() != "application/json":
+            return respond("415 Unsupported Media Type", {"error": "content_type"})
+        try:
+            length = int(environ.get("CONTENT_LENGTH") or 0)
+        except ValueError:
+            length = 0
+        if not 0 < length <= 4096:
+            return respond("400 Bad Request", {"error": "invalid_length"})
+        try:
+            data = json.loads(environ["wsgi.input"].read(length))
+        except (ValueError, UnicodeError):
+            return respond("400 Bad Request", {"error": "invalid_json"})
+        if not isinstance(data, dict) or set(data) - {"message", "context"}:
+            return respond("400 Bad Request", {"error": "invalid_fields"})
+        message, context = data.get("message"), data.get("context", "")
+        if (not isinstance(message, str) or not 0 < len(message.strip()) <= 280
+                or not isinstance(context, str) or (context and context not in FACTS)):
+            return respond("400 Bad Request", {"error": "invalid_message_or_context"})
+        intent = classify(message, context)
+        if intent is None:
+            return respond("200 OK", {"reply": REFUSAL, "context": context})
 
-
-def _with_voice(reply, deadline):
-    """Adds `audio`: base64 WAV of what she says (line, then the riddle), or None."""
-    if reply.get("reveal"):
-        wav = tts.speak_wav(reply["line"], deadline, cache=True)
-    else:
-        wav = tts.speak_wav(" ".join(t for t in (reply.get("line"), reply.get("riddle")) if t), deadline)
-    reply["audio"] = base64.b64encode(wav).decode("ascii") if wav else None
-    return reply
-
-
-@app.get("/health")
-def health():
-    return {"ok": True, "fake": config.settings.fake}
-
-
-@app.post("/frame")
-async def frame(request: Request):
-    body = await request.body()
-    if not body:
-        raise HTTPException(400, "send raw JPEG bytes as the body (Content-Type: image/jpeg)")
-    if len(body) > MAX_FRAME_BYTES:
-        raise HTTPException(413, "frame too large; send ~320x240 JPEG")
-    if config.settings.fake:
-        # Looks at the screen for 1 s out of every 5 s, so Medusa's STONED path can be tested end to end.
-        now = time.time()
-        looking = now % 5 < 1
-        return {"face_found": True, "looking_at_screen": looking,
-                "yaw": 0.0 if looking else 35.0, "pitch": 0.0, "ts": round(now, 2)}
-    try:
-        return _detector().analyse(body)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    except GazeUnavailable as e:
-        raise HTTPException(503, str(e))
-
-
-@app.post("/sphinx")
-def sphinx_speak(state: SphinxState):
-    started = time.monotonic()
-    data = state.model_dump()
-    deadline = _deadline()
-    reply = sphinx.fake_speak(data) if config.settings.fake else sphinx.speak(data, deadline)
-    _with_voice(reply, deadline)
-    log.info("/sphinx %s -> %r (%.1fs)", state.event, reply["line"], time.monotonic() - started)
-    return reply
-
-
-@app.post("/sphinx/talk")
-def sphinx_talk(
-    state: str = Form(...),
-    audio: Optional[UploadFile] = File(None),
-    text: Optional[str] = Form(None),
-):
-    """`text` (optional, not in the contract yet) skips speech-to-text: the typed debug-box fallback."""
-    started = time.monotonic()
-    try:
-        data = SphinxState(**json.loads(state)).model_dump()
-    except (ValueError, TypeError) as e:
-        raise HTTPException(400, "`state` must be the /sphinx JSON as a string: %s" % e)
-    wav = audio.file.read(MAX_AUDIO_BYTES + 1) if audio is not None else b""
-    if len(wav) > MAX_AUDIO_BYTES:
-        raise HTTPException(413, "audio too long; send <= ~8 s of 16 kHz mono WAV")
-    if text is None and not wav:
-        raise HTTPException(400, "send `audio` (WAV) or `text`")
-
-    deadline = _deadline()
-    if config.settings.fake:
-        reply = sphinx.fake_talk(data, text)
-    else:
-        heard = text
-        if heard is None:
+        retry = [("Retry-After", "60")]
+        if not slots.acquire(blocking=False):
+            return respond("429 Too Many Requests", {"error": "busy"}, retry)
+        try:
+            if not budget.reserve(environ.get("REMOTE_ADDR", "")):
+                return respond("429 Too Many Requests", {"error": "busy"}, retry)
+            topic, focus = intent
             try:
-                heard = stt.transcribe(wav, deadline)
-            except stt.SttError as e:
-                log.warning("speech-to-text failed: %s", e)
-                heard = ""
-        reply = sphinx.talk(heard, data, deadline)
-    _with_voice(reply, deadline)
-    log.info("/sphinx/talk heard=%r verdict=%s reveal=%s -> %r (%.1fs)", reply["heard"], reply["verdict"], reply["reveal"],
-             reply["line"], time.monotonic() - started)
-    return reply
+                reply = answer(topic, focus, context, generate)
+            except OracleUnavailable:
+                return respond("503 Service Unavailable", {"error": "unavailable"})
+            return respond("200 OK", {"reply": reply, "context": topic})
+        finally:
+            slots.release()
+
+    return application
+
+
+app = create_app()
+
+
+class QuietHandler(WSGIRequestHandler):
+    def log_message(self, *args):
+        pass
+
+
+if __name__ == "__main__":
+    with make_server("127.0.0.1", 8787, app, handler_class=QuietHandler) as server:
+        print("Oracle developer endpoint: http://127.0.0.1:8787/oracle")
+        server.serve_forever()

@@ -9,12 +9,12 @@ for name in ("GEMINI_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY", "ELEVENLABS_API
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from server import config, main  # noqa: E402
+from server import config, sphinx_api  # noqa: E402
 
 
 @pytest.fixture
 def client():
-    return TestClient(main.app)
+    return TestClient(sphinx_api.app)
 
 
 @pytest.fixture

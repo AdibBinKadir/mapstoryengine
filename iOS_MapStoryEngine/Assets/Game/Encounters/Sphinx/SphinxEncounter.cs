@@ -7,10 +7,12 @@ using UnityEngine.XR.ARFoundation;
 public class SphinxEncounter : MonoBehaviour, IEncounter
 {
     public const string ClueText = "Not here.";
-    const string ModelResource = "SphinxModel";   // optional prefab in Sphinx/Resources
+    const string ModelResource = "SphinxModel";
     const string OfflineLine = "The Sphinx ignores you. (No answer from the oracle. Try again.)";
     const float MinRecordingSeconds = 0.3f;
     const float RevealPauseSeconds = 1f;
+    const float PreviewScale = 0.32f;
+    const float PreviewCenterHeight = 0.19f;
 
     public float distance = 3.5f;      // metres from the camera to her centre (she is ~2.5 m long)
     public float belowCamera = 1.2f;   // metres below the camera (roughly the floor for a standing player)
@@ -132,7 +134,8 @@ public class SphinxEncounter : MonoBehaviour, IEncounter
         screen.SetHeard(reply.heard);
         screen.SetLine(reply.line, reply.riddle);
         screen.SetPips(progress.CorrectCount);
-        screen.SetStatus("");
+        screen.SetSpeakEnabled(reply.speechInput && !progress.Won);
+        screen.SetStatus(reply.speechInput || progress.Won ? "" : "Type your answer.");
 
         float speakingFor = 3f;
         AudioClip clip = SphinxClient.ToClip(reply.audio);
@@ -146,7 +149,6 @@ public class SphinxEncounter : MonoBehaviour, IEncounter
 
         if (progress.Won)
         {
-            screen.SetSpeakEnabled(false);
             revealEndsAt = Time.unscaledTime + speakingFor + RevealPauseSeconds;
         }
     }
@@ -167,7 +169,9 @@ public class SphinxEncounter : MonoBehaviour, IEncounter
         Pulse();
         if (revealEndsAt > 0f && Time.unscaledTime >= revealEndsAt)
         {
-            if (!practiceRun) GameEvents.RaiseClueUnlocked(ClueText);
+            // The voyage journal awards the clue when this encounter reports a win.
+            if (!practiceRun && !Odyssey.VoyageState.Started)
+                GameEvents.RaiseClueUnlocked(ClueText);
             Finish(true);
         }
     }
@@ -188,6 +192,23 @@ public class SphinxEncounter : MonoBehaviour, IEncounter
         model.transform.localScale = modelScale * (1f + 0.08f * pulse);
     }
 
+    internal void ShowPreview(Vector3 center, Camera camera, Vector3 up)
+    {
+        EnsureModel();
+        model.transform.localScale = modelScale * PreviewScale;
+        model.transform.position = center - up * PreviewCenterHeight;
+        Vector3 facing = Vector3.ProjectOnPlane(camera.transform.position - center, up);
+        if (facing.sqrMagnitude > 0.01f)
+            model.transform.rotation = Quaternion.LookRotation(facing, up);
+        model.SetActive(true);
+    }
+
+    internal void HidePreview()
+    {
+        if (!IsRunning && model != null)
+            model.SetActive(false);
+    }
+
     void PlaceModel()
     {
         Camera cam = null;
@@ -202,11 +223,20 @@ public class SphinxEncounter : MonoBehaviour, IEncounter
         if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;
         forward.Normalize();
 
+        EnsureModel();
+        pulse = 0f;
+        model.transform.localScale = modelScale;
+        model.transform.position = eye + forward * distance + Vector3.down * belowCamera;
+        model.transform.rotation = Quaternion.LookRotation(-forward, Vector3.up);
+        model.SetActive(true);
+    }
+
+    void EnsureModel()
+    {
+        if (model != null) return;
         var prefab = Resources.Load<GameObject>(ModelResource);
         model = prefab != null ? Instantiate(prefab) : Placeholder();
         model.name = "Sphinx";
-        model.transform.position = eye + forward * distance + Vector3.down * belowCamera;
-        model.transform.rotation = Quaternion.LookRotation(-forward, Vector3.up);
         modelScale = model.transform.localScale;
     }
 
@@ -242,13 +272,18 @@ public class SphinxEncounter : MonoBehaviour, IEncounter
         voice.clip = null;
         if (screen != null) screen.Destroy();
         screen = null;
-        if (model != null) Destroy(model);
-        model = null;
+        HidePreview();
         GameEvents.RaiseEncounterEnded(EncounterType.Sphinx, won);
     }
 
     void OnDisable()
     {
         Abort();
+        HidePreview();
+    }
+
+    void OnDestroy()
+    {
+        if (model != null) Destroy(model);
     }
 }

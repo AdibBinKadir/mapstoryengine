@@ -1,23 +1,30 @@
-# Odyssey AR build changes
+# Return to Ithaca iOS build and verification
 
-## Unity projects
+## What is in the final voyage
 
-- The Android starter uses Unity 2019.4.41f2 and ARCore. Its setup includes Unity MCP, Google Places Nearby Search (New), and local credential loading. See [UNITY.md](UNITY.md) for the Android changes and their verification status.
-- The `ios` branch upgraded `iOS_MapStoryEngine` to Unity 2019.4.41f2. The build opens `Assets/StoryEngine/Scenes/MapStory.unity` and uses AR Foundation 3.1.3 with ARKit XR Plugin 3.0.4.
-- The iOS starter now uses Google Places Nearby Search (New). The title flow waits for the search to finish before continuing. The iOS AR path uses AR Foundation, and the branch includes native compatibility fixes for the legacy Mapbox AR plugin.
-- The iOS credential loader accepts the `GOOGLE_PLACES_API_KEY` and `MAPBOX_ACCESS_TOKEN` environment variables or the ignored `iOS_MapStoryEngine/.ardyssey.local.json` file. Copy the [example file](iOS_MapStoryEngine/.ardyssey.example.json) and fill in `GooglePlacesApiKey` and `MapboxAccessToken` with a Places API (New) key and a public Mapbox token. The export step writes them to `Data/Raw/ardyssey-client-config.json`. Keep the local profile and credential-bearing exports and app bundles private.
+- **Play** opens the rear-camera AR voyage. Cyclops, Medusa, and the Sphinx are placed within about one meter of the start in different directions. Cyclops and the Sphinx appear in AR and can be approached in any order. Medusa stays hidden until the player is within 55 cm of her site.
+- Ithaca is hidden about 1.5 m from the start. Its flag and arrival music play within 60 cm, and reaching it finishes the voyage.
+- Each new voyage starts with an empty journal. Boss victories unlock their clues in the order earned. The Oracle of Delphi answers gameplay questions with its own chat panel.
+- The home screen includes **Test Cyclops**, **Test Medusa**, **Test Sphinx**, and **Reached Ithaca**. The Ithaca test previews the arrival and returns to the home screen. The iOS app icon is the helmet-and-wave artwork.
 
-## Local Xcode export
+## Build from Unity
 
-The current `Odyssey iOS Xcode` export was generated from the iOS project and built with Xcode 27.2. These fixes were applied to that generated export. Reapply them when regenerating the export until they are incorporated into the Unity build pipeline.
+1. Open `iOS_MapStoryEngine` in Unity **2019.4.41f2** with **iOS Build Support** installed. The project uses AR Foundation 3.1.3 and ARKit XR Plugin 3.0.4.
+2. Follow [team setup](TEAM_SETUP.md) for the local Google Places and Mapbox credentials. For the Oracle and Sphinx, follow the [server setup](server/README.md) and configure a shared HTTPS URL before exporting.
+3. Open `Assets/StoryEngine/Scenes/MapStory.unity`. In **File → Build Settings**, select **iOS**, keep `MapStory` first in the scene list, and choose **Build**. Choose **Append** when updating your existing Xcode export.
+4. Open the generated `Unity-iPhone.xcodeproj`. In the `Unity-iPhone` target's **Signing & Capabilities**, select your development team. Connect and select a Face ID iPhone, then press **⌘R**.
 
-- Set the minimum deployment target to iOS 15.0 for the installed Xcode SDK.
-- Added the bundled Mapbox Mobile Events header directory to the `UnityFramework` header search paths and removed the unsupported `-mno-thumb` flag from the arm64 app target. The local Unity working tree also has an uncommitted postprocessor update for Xcode target selection, the header path, and the compiler flag.
-- Added a UIKit scene manifest in `Info.plist` and a scene delegate in `Classes/UnityAppController.mm`. The scene delegate attaches Unity's window to a `UIWindowScene` and forwards foreground, active, inactive, and background transitions to Unity's existing handlers. This fixes the startup trap on iOS 27 with the iOS 27 SDK.
-- Disabled strict aliasing for `UnityFramework` to fix startup crashes in Unity 2019's generated IL2CPP delegate code with the current compiler.
+The local `.ardyssey.local.json` and venue endpoint files are ignored by Git. The export includes the client configuration in `Data/Raw/ardyssey-client-config.json`. Keep credential-bearing exports and app bundles private.
 
-## Verification
+## Xcode export fixes
 
-- Xcode built and signed `iOSMapStoryEngine`. The signed build contained both credentials and was installed on an iPhone 15 Pro running iOS 27.0.1. The app launched and its process stayed running after startup.
-- Xcode Run had failed during device symbol extraction on a nearly full Mac. Installation and launch were verified using Xcode's `devicectl`.
-- Live Google Places results, Mapbox tile loading, and AR gameplay still need an on-device test.
+Unity's postprocessor qualifies public `UnityFramework` header includes, links ARKit to `UnityFramework`, adds the Mapbox Mobile Events header search path, and removes `-mno-thumb` from the app target. The Unity project sets the iOS deployment target to 15.0.
+
+For a fresh export with the iOS 27 SDK, reproduce the launch fixes from the working Xcode export if needed. Its `Info.plist` and `Classes/UnityAppController.mm` use `OdysseySceneDelegate` to attach Unity's window to a `UIWindowScene` and forward lifecycle events. Its `UnityFramework` target uses `GCC_STRICT_ALIASING = NO` for Unity 2019's generated IL2CPP code. Check these settings after appending if Xcode regenerated the affected files.
+
+## How to test
+
+1. Open the Unity project and check its Console for compiler errors.
+2. Run `python -m pytest -q server` from the repository root after installing `server/requirements.txt`.
+3. On iPhone, try all four home test buttons. Ask the Oracle a gameplay question and answer a Sphinx riddle by typing or speaking with voice configured.
+4. Tap **Play**, open the clue journal, and confirm it starts empty. Walk to the bosses in any order and confirm each victory unlocks only its own clue. Walk to Ithaca to check the reveal and arrival audio.

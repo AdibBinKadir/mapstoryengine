@@ -20,26 +20,29 @@ You are Odysseus. Somewhere in the streets around you lies **Ithaca**, and the g
 
 - **The Cyclops** blocks the road, his one eye healed and furious. Tap to strike, raise your shield to survive.
 - **Medusa** seizes your screen and watches you through the front camera. Look at her with your eyes open for half a second and you are **stone**. Close your eyes. Look away. Listen to her hiss.
-- **The Sphinx** will only talk, out loud. Answer her riddles while she mocks your deaths and your sense of direction. Solve two and she leans in to share the secret she's been guarding:
+- **The Sphinx** speaks her riddles. Answer aloud or type your answer while she mocks your deaths and your sense of direction. Solve two and she leans in to share the secret she's been guarding:
 
 > *"Fine. A deal is a deal. Lean closer, sailor... Ithaca is... Not here."*
 
 Keep walking. You'll know Ithaca when you see the flag.
 
+All three bosses and Ithaca are placed together when the rear camera starts tracking. Explore in any order. Defeating each boss earns one clue in the current voyage's journal. The Oracle of Delphi answers questions about the game.
+
 ## What makes it different
 - **A monster you must not look at.** ARKit face tracking runs on the hidden TrueDepth camera and reads your blinks and gaze. The feed is never shown, but the danger is real.
-- **A boss you defeat with your voice.** Speech goes to our server. ElevenLabs transcribes it, Gemini judges the answer and writes the Sphinx's reply in character, and ElevenLabs speaks it back, in about 2 seconds. She can't be talked into accepting a wrong answer.
+- **A boss you can defeat with your voice.** ElevenLabs transcribes your speech, Gemini judges the answer and writes the Sphinx's reply in character, and ElevenLabs speaks it back.
 - **One painted world.** The UI, Medusa's takeover video and the 3D assets share a moonlit oil-painting style.
 
 ## How we built it
 ```
 iPhone · Unity 2019.4 + AR Foundation/ARKit + Mapbox          Laptop · Python FastAPI
-  GPS voyage map ── encounters placed around you
+  AR-tracked voyage ── encounters placed around you
   Cyclops   rear-camera AR fight
   Medusa    ARKit face tracking → blink + gaze → STONED
   Sphinx    hold to speak → WAV ──── /sphinx/talk ────▶  ElevenLabs speech-to-text
             subtitles + her voice ◀── JSON + WAV ──────  Gemini (persona, judging)
                                                          ElevenLabs text-to-speech
+  Oracle    gameplay question ───── /oracle ─────────▶  Gemini (rule-guided replies)
 ```
 
 ## Challenges we ran into
@@ -49,8 +52,8 @@ iPhone · Unity 2019.4 + AR Foundation/ARKit + Mapbox          Laptop · Python 
 - **A 600,000-triangle Sphinx.** We cut the 3D scan to 10k triangles and re-baked its texture in Python so it runs smoothly on a phone.
 
 ## Run it
-- **Game:** open `iOS_MapStoryEngine/` in Unity **2019.4.41f2**, scene `Assets/StoryEngine/Scenes/MapStory.unity`. Each encounter also runs on its own from `Assets/Game/Sandbox/`. See [`TEAM_SETUP.md`](TEAM_SETUP.md) for keys and [`changes.md`](changes.md) for the iOS build.
-- **Sphinx server:** `pip install -r server/requirements.txt`, put your Gemini and ElevenLabs keys in `server/.env`, then run `python -m server` (`--fake` runs with no keys). See [`server/README.md`](server/README.md).
+- **Game.** Open `iOS_MapStoryEngine/` in Unity **2019.4.41f2**, scene `Assets/StoryEngine/Scenes/MapStory.unity`. The home screen has **Test Cyclops**, **Test Medusa**, **Test Sphinx**, and **Reached Ithaca**. See [team setup](TEAM_SETUP.md) and the [iPhone build steps](changes.md).
+- **Oracle and Sphinx server.** Install `server/requirements.txt`, put your Gemini key and optional ElevenLabs settings in `server/.env`, then run `python -m server`. Use the same HTTPS URL for both features on iPhone. See the [server setup](server/README.md).
 
 ## Team
 **Thongum Athoiba** · **Adib Bin Kadir** · **Farhan Ishraq Khan** · **Tahmid Wasif**

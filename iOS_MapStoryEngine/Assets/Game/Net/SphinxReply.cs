@@ -11,4 +11,5 @@ public class SphinxReply
     public string verdict;      // "correct" | "wrong" | "none" (talk only)
     public bool reveal;         // true on the second correct answer: the "Not here." reveal
     public string audio;        // base64 WAV of line (+ riddle), or empty when the voice failed
+    public bool speechInput;
 }

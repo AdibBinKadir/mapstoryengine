@@ -5,6 +5,7 @@ using UnityEngine;
 [RequireComponent(typeof(SphinxEncounter))]
 public class SphinxSandbox : MonoBehaviour
 {
+    const string UrlPrefKey = "odyssey.serverUrl";
     SphinxEncounter encounter;
     string url;
     string lastEvent = "";
@@ -12,8 +13,10 @@ public class SphinxSandbox : MonoBehaviour
     void Awake()
     {
         encounter = GetComponent<SphinxEncounter>();
-        url = SphinxClient.ServerUrl;
+        url = PlayerPrefs.GetString(UrlPrefKey, SphinxClient.ServerUrl);
     }
+
+    void Start() { GetComponent<SphinxClient>().ServerUrlOverride = url; }
 
     void OnEnable()
     {
@@ -49,7 +52,12 @@ public class SphinxSandbox : MonoBehaviour
         GUILayout.BeginHorizontal();
         GUILayout.Label("Server", GUILayout.Width(50));
         url = GUILayout.TextField(url ?? "");
-        if (GUILayout.Button("Save", GUILayout.Width(50))) SphinxClient.ServerUrl = url;
+        if (GUILayout.Button("Save", GUILayout.Width(50)))
+        {
+            GetComponent<SphinxClient>().ServerUrlOverride = url;
+            PlayerPrefs.SetString(UrlPrefKey, url.Trim());
+            PlayerPrefs.Save();
+        }
         GUILayout.EndHorizontal();
         GUILayout.BeginHorizontal();
         if (GUILayout.Button("Begin")) encounter.Begin();

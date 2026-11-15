@@ -85,6 +85,7 @@ public sealed class SphinxScreen
         s.input.textComponent = typed;
         s.input.placeholder = hint;
         s.input.lineType = InputField.LineType.SingleLine;
+        s.input.characterLimit = 280;
         RectTransform send = OdysseyTheme.Rect(s.typing, "Send", new Vector2(0.74f, 0), Vector2.one, Vector2.zero, Vector2.zero);
         InputField inputField = s.input;
         OdysseyTheme.Button(send, () =>
@@ -95,7 +96,7 @@ public sealed class SphinxScreen
             onTyped(text);
         });
         OdysseyTheme.Label(OdysseyTheme.Inset(send, "Label", 4), "Send", 17, OdysseyTheme.Ivory);
-        s.ShowTyping(Application.isEditor);
+        s.ShowTyping(true);
 
         // Bottom: hold to speak.
         RectTransform speakRect = OdysseyTheme.Rect(area, "Speak", new Vector2(0.5f, 0), new Vector2(0.5f, 0),

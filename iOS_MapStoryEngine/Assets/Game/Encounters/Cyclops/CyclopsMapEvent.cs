@@ -10,12 +10,13 @@ namespace Odyssey.Cyclops
     {
         internal const float SpawnRadius = 1f;
         internal const float MinSpawnDistance = 0.95f;
-        internal const float CyclopsEntryDistance = 0.85f;
-        internal const float MedusaRevealDistance = 0.85f;
+        internal const float BossEntryDistance = 0.85f;
+        private const float MedusaRevealDistance = 0.55f;
+        private const float SphinxBearingVariation = 10f;
         internal const float IthacaRevealDistance = 0.60f;
         private const float IthacaSpawnRadius = 1.50f;
         private const float IthacaMinSpawnDistance = 1.35f;
-        private const float MedusaRearmDistance = 1.00f;
+        private const float MedusaRearmDistance = 0.85f;
         private const float CyclopsAudioRange = 1.20f;
         private const float CyclopsFullVolumeDistance = 0.38f;
         private const float MedusaAudioRange = 1.30f;
@@ -27,7 +28,9 @@ namespace Odyssey.Cyclops
 
         private readonly VoyageSite cyclops = new VoyageSite();
         private readonly VoyageSite medusa = new VoyageSite();
+        private readonly VoyageSite sphinx = new VoyageSite();
         private readonly VoyageSite ithaca = new VoyageSite();
+        private VoyageSite[] bossSites;
         private ARSessionOrigin arOrigin;
         private ARSession arSession;
         private ARAnchorManager anchorManager;
@@ -40,6 +43,7 @@ namespace Odyssey.Cyclops
         private StoryManager story;
         private AudioSource cyclopsProximityAudio;
         private AudioSource medusaProximityAudio;
+        private AudioSource ithacaArrivalAudio;
         private GameObject ithacaPrefab;
         private Transform ithacaFlag;
         private Vector3 ithacaFlagScale;
@@ -47,13 +51,13 @@ namespace Odyssey.Cyclops
         private float cyclopsPreviewHeight;
         private bool sitesPlaced;
         private bool practiceFight;
-        private int clueCountAtStart;
 
         private VoyageSite activeSite;
         private CyclopsEncounter cyclopsPrefab;
         private CyclopsEncounter cyclopsPreview;
         private CyclopsEncounter activeCyclops;
         private MedusaEncounter medusaEncounter;
+        private SphinxEncounter sphinxEncounter;
         private IFaceSignals editorFace;
         private bool savedArSession;
         private bool savedArCamera;
@@ -66,12 +70,13 @@ namespace Odyssey.Cyclops
         private Canvas overlay;
         private RectTransform safePanel;
         private Button faceCyclops;
+        private Button faceSphinx;
+        private Button closeIthacaTest;
         private Text resultMessage;
-        private float resultExpiresAt;
 
+        private bool TrackingReady => Application.isEditor || ARSession.state == ARSessionState.SessionTracking;
         private bool CanExplore => voyage != null && voyage.CanExplore && activeSite == null
-            && VoyageState.Health > 0 && Application.isFocused
-            && (Application.isEditor || ARSession.state == ARSessionState.SessionTracking);
+            && VoyageState.Health > 0 && Application.isFocused && TrackingReady;
 
         private void Start()
         {
@@ -111,6 +116,8 @@ namespace Odyssey.Cyclops
             storyRaycaster = storyCanvas.GetComponent<GraphicRaycaster>();
             medusaEncounter = gameObject.AddComponent<MedusaEncounter>();
             medusaEncounter.medusaImage = medusaImage;
+            sphinxEncounter = gameObject.AddComponent<SphinxEncounter>();
+            bossSites = new[] { cyclops, sphinx, medusa };
             cyclopsProximityAudio = OdysseyEncounterAudio.CreateLoop(gameObject, OdysseyEncounterAudio.CyclopsProximity, 0f);
             medusaProximityAudio = OdysseyEncounterAudio.CreateLoop(gameObject, OdysseyEncounterAudio.MedusaProximity, 0f);
             gameObject.AddComponent<FaceTrackingServices>();
@@ -124,21 +131,27 @@ namespace Odyssey.Cyclops
             VoyageRoute.Prepare(gameObject.scene, mapCamera, mapTouch, mapTools, title);
             voyage = VoyageInterface.Create(arSession, rearCamera,
                 () => OpenEncounter(cyclops, true), () => OpenEncounter(medusa, true),
-                () => sitesPlaced, () => cyclops.Cleared, () => medusa.Cleared);
+                () => OpenEncounter(sphinx, true), StartIthacaTest);
         }
 
         private void LateUpdate()
         {
             bool explore = CanExplore;
-            overlay.gameObject.SetActive(explore || VoyageState.Won);
+            bool testingIthaca = activeSite == ithaca;
+            overlay.gameObject.SetActive(explore || VoyageState.Won || testingIthaca);
             if (!explore)
             {
                 SetApproachVolume(cyclopsProximityAudio, 0f);
                 SetApproachVolume(medusaProximityAudio, 0f);
                 if (cyclopsPreview != null)
                     cyclopsPreview.gameObject.SetActive(false);
+                sphinxEncounter.HidePreview();
+                if (testingIthaca && ithacaFlag == null && TrackingReady)
+                    PlaceIthacaTestFlag();
                 if (ithacaFlag != null)
                     UpdateIthacaFlag();
+                else if (testingIthaca)
+                    CyclopsView.FitSafeArea(safePanel);
                 return;
             }
 
@@ -148,63 +161,69 @@ namespace Odyssey.Cyclops
                 return;
 
             CyclopsView.FitSafeArea(safePanel);
-            resultMessage.transform.parent.gameObject.SetActive(Time.unscaledTime < resultExpiresAt);
             if (TryReachIthaca(player))
                 return;
 
-            UpdateCyclops(player);
-            CheckMedusa(player);
+            if (!cyclops.Cleared)
+                UpdateCyclops(player);
+            if (!sphinx.Cleared)
+            {
+                Vector3 center = trackingSpace.TransformPoint(PositionOf(sphinx));
+                sphinxEncounter.ShowPreview(center, rearCamera, trackingSpace.up);
+            }
+            VoyageSite nearby = NearestBossInRange(player);
+            faceCyclops.gameObject.SetActive(nearby == cyclops);
+            faceSphinx.gameObject.SetActive(nearby == sphinx);
+            CheckMedusa(player, nearby == medusa);
         }
 
         private bool TryPlaceSites(Vector3 player)
         {
             float radius = Random.Range(MinSpawnDistance, SpawnRadius);
-            if (!TryOpeningPosition(player, Random.Range(0.43f, 0.57f), radius, out Vector3 position)
-                && !TryOpeningPosition(player, 0.5f, radius, out position))
+            if (!TryOpeningPosition(player, Random.Range(0.43f, 0.57f), radius, out Vector3 position, out float centerHeight)
+                && !TryOpeningPosition(player, 0.5f, radius, out position, out centerHeight))
                 return false;
 
             cyclops.LocalPosition = position;
+            cyclopsPreviewHeight = centerHeight - PreviewCenterHeight;
             Vector3 offset = position - player;
             float bearing = Mathf.Atan2(offset.x, offset.z) * Mathf.Rad2Deg;
-
-            // Separation keeps both proximity zones from triggering on the same step.
             float medusaOffset = Random.Range(135f, 225f);
             medusa.LocalPosition = SitePosition(player, bearing + medusaOffset,
                 Random.Range(MinSpawnDistance, SpawnRadius));
 
-            // Place Ithaca in the middle of the wider arc between the bosses so their reveal areas stay separate.
+            // The wider gap keeps the arrival radius away from the boss entry zones.
             float ithacaBearing = bearing + (medusaOffset < 180f ? medusaOffset + 360f : medusaOffset) * 0.5f;
             ithaca.LocalPosition = SitePosition(player, ithacaBearing, Random.Range(IthacaMinSpawnDistance, IthacaSpawnRadius));
-            sitesPlaced = true;
+            float sphinxBearing = ithacaBearing + 180f + Random.Range(-SphinxBearingVariation, SphinxBearingVariation);
+            sphinx.LocalPosition = SitePosition(player, sphinxBearing, Random.Range(MinSpawnDistance, SpawnRadius));
 
             if (!Application.isEditor)
             {
                 anchorManager = arOrigin.GetComponent<ARAnchorManager>();
                 if (anchorManager == null)
                     anchorManager = arOrigin.gameObject.AddComponent<ARAnchorManager>();
-                Anchor(cyclops);
-                Anchor(medusa);
+                foreach (VoyageSite site in bossSites)
+                    Anchor(site);
                 Anchor(ithaca);
             }
+            sitesPlaced = true;
             return true;
         }
 
-        private bool TryOpeningPosition(Vector3 player, float viewportX, float radius, out Vector3 position)
+        private bool TryOpeningPosition(Vector3 player, float viewportX, float radius, out Vector3 position, out float centerHeight)
         {
             Transform trackingSpace = arOrigin.transform;
             Ray ray = rearCamera.ViewportPointToRay(new Vector3(viewportX, 0.48f, 0f));
             Vector3 direction = trackingSpace.InverseTransformDirection(ray.direction);
-            position = OpeningPosition(player, direction, radius, out float centerHeight);
+            position = OpeningPosition(player, direction, radius, out centerHeight);
             if (WalkingDistance(player, position) < MinSpawnDistance - 0.01f)
                 return false;
 
             Vector3 worldCenter = trackingSpace.TransformPoint(position + Vector3.up * centerHeight);
             Vector3 viewport = rearCamera.WorldToViewportPoint(worldCenter);
-            if (viewport.z <= 0f || viewport.x < 0.28f || viewport.x > 0.72f || viewport.y < 0.22f || viewport.y > 0.78f)
-                return false;
-
-            cyclopsPreviewHeight = centerHeight - PreviewCenterHeight;
-            return true;
+            return viewport.z > 0f && viewport.x >= 0.28f && viewport.x <= 0.72f
+                && viewport.y >= 0.22f && viewport.y <= 0.78f;
         }
 
         internal static Vector3 OpeningPosition(Vector3 player, Vector3 direction, float radius, out float centerHeight)
@@ -224,7 +243,7 @@ namespace Odyssey.Cyclops
 
         private void Anchor(VoyageSite site)
         {
-            if (anchorManager.isActiveAndEnabled && anchorManager.subsystem != null)
+            if (anchorManager != null && anchorManager.isActiveAndEnabled && anchorManager.subsystem != null)
                 site.Anchor = anchorManager.AddAnchor(new Pose(arOrigin.transform.TransformPoint(site.LocalPosition),
                     arOrigin.transform.rotation));
         }
@@ -252,6 +271,53 @@ namespace Odyssey.Cyclops
             if (ithacaPrefab == null || WalkingDistance(player, PositionOf(ithaca)) > IthacaRevealDistance)
                 return false;
 
+            RevealIthaca();
+            VoyageState.Complete();
+            return true;
+        }
+
+        private void StartIthacaTest()
+        {
+            if (VoyageState.Started || activeSite != null || ithacaPrefab == null)
+                return;
+
+            BeginEncounter(ithaca, true);
+            resultMessage.text = "Point the camera at a well-lit area";
+            resultMessage.transform.parent.gameObject.SetActive(true);
+            closeIthacaTest.gameObject.SetActive(true);
+        }
+
+        private void PlaceIthacaTestFlag()
+        {
+            Transform trackingSpace = arOrigin.transform;
+            Vector3 player = trackingSpace.InverseTransformPoint(rearCamera.transform.position);
+            Vector3 forward = trackingSpace.InverseTransformDirection(rearCamera.transform.forward);
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.04f)
+                forward = Vector3.forward;
+            ithaca.LocalPosition = player + forward.normalized * IthacaSpawnRadius;
+            RevealIthaca();
+        }
+
+        private void EndIthacaTest()
+        {
+            if (activeSite != ithaca)
+                return;
+
+            if (ithacaFlag != null)
+            {
+                ithacaFlag.gameObject.SetActive(false);
+                Destroy(ithacaFlag.gameObject);
+                ithacaFlag = null;
+            }
+            StopApproachAudio(ithacaArrivalAudio);
+            resultMessage.transform.parent.gameObject.SetActive(false);
+            closeIthacaTest.gameObject.SetActive(false);
+            ReturnToVoyage(false);
+        }
+
+        private void RevealIthaca()
+        {
             Transform trackingSpace = arOrigin.transform;
             Vector3 position = IthacaFlagPosition();
             Vector3 facing = Vector3.ProjectOnPlane(rearCamera.transform.position - position, trackingSpace.up);
@@ -263,17 +329,21 @@ namespace Odyssey.Cyclops
             UpdateIthacaFlag();
 
             faceCyclops.gameObject.SetActive(false);
+            faceSphinx.gameObject.SetActive(false);
             if (cyclopsPreview != null)
                 cyclopsPreview.gameObject.SetActive(false);
+            sphinxEncounter.HidePreview();
             resultMessage.text = "You reached Ithaca";
             resultMessage.transform.parent.gameObject.SetActive(true);
             StopApproachAudio(cyclopsProximityAudio);
             StopApproachAudio(medusaProximityAudio);
             var arrival = Resources.Load<AudioClip>("Odyssey/IthacaArrival");
             if (arrival != null)
-                OdysseyEncounterAudio.CreateSource(gameObject).PlayOneShot(arrival, 0.75f);
-            VoyageState.Complete();
-            return true;
+            {
+                if (ithacaArrivalAudio == null)
+                    ithacaArrivalAudio = OdysseyEncounterAudio.CreateSource(gameObject);
+                ithacaArrivalAudio.PlayOneShot(arrival, 0.75f);
+            }
         }
 
         private Vector3 IthacaFlagPosition()
@@ -291,13 +361,6 @@ namespace Odyssey.Cyclops
 
         private void UpdateCyclops(Vector3 player)
         {
-            if (cyclops.Cleared)
-            {
-                faceCyclops.gameObject.SetActive(false);
-                StopApproachAudio(cyclopsProximityAudio);
-                return;
-            }
-
             Vector3 position = PositionOf(cyclops);
             float distance = WalkingDistance(player, position);
             SetApproachVolume(cyclopsProximityAudio, ApproachVolume(distance, CyclopsAudioRange, CyclopsFullVolumeDistance));
@@ -307,7 +370,6 @@ namespace Odyssey.Cyclops
             cyclopsPreview.gameObject.SetActive(true);
             Vector3 world = arOrigin.transform.TransformPoint(position);
             cyclopsPreview.ShowPreview(world + arOrigin.transform.up * cyclopsPreviewHeight, rearCamera, arOrigin.transform.up);
-            faceCyclops.gameObject.SetActive(distance <= CyclopsEntryDistance);
         }
 
         internal static float ApproachVolume(float distance, float range, float fullVolumeDistance)
@@ -337,16 +399,36 @@ namespace Odyssey.Cyclops
             source.volume = 0f;
         }
 
-        private void EnterCyclops()
+        private VoyageSite NearestBossInRange(Vector3 player)
         {
-            if (!CanExplore || !sitesPlaced || cyclops.Cleared)
-                return;
-            Vector3 player = arOrigin.transform.InverseTransformPoint(rearCamera.transform.position);
-            if (WalkingDistance(player, PositionOf(cyclops)) <= CyclopsEntryDistance)
-                OpenEncounter(cyclops, false);
+            VoyageSite nearest = null;
+            float nearestDistance = float.PositiveInfinity;
+            foreach (VoyageSite site in bossSites)
+            {
+                if (site.Cleared || (site == medusa && (medusa.WaitForExit || Services.Face == null)))
+                    continue;
+
+                float distance = WalkingDistance(player, PositionOf(site));
+                if (distance >= nearestDistance)
+                    continue;
+
+                nearest = site;
+                nearestDistance = distance;
+            }
+            float entryDistance = nearest == medusa ? MedusaRevealDistance : BossEntryDistance;
+            return nearestDistance <= entryDistance ? nearest : null;
         }
 
-        private void CheckMedusa(Vector3 player)
+        private void EnterNearbyBoss(VoyageSite site)
+        {
+            if (!CanExplore || !sitesPlaced)
+                return;
+            Vector3 player = arOrigin.transform.InverseTransformPoint(rearCamera.transform.position);
+            if (NearestBossInRange(player) == site)
+                OpenEncounter(site, false);
+        }
+
+        private void CheckMedusa(Vector3 player, bool nearest)
         {
             if (medusa.Cleared || Services.Face == null)
             {
@@ -360,7 +442,7 @@ namespace Odyssey.Cyclops
 
             float volume = medusa.WaitForExit ? 0f : ApproachVolume(distance, MedusaAudioRange, MedusaRevealDistance);
             SetApproachVolume(medusaProximityAudio, volume);
-            if (medusa.WaitForExit || distance > MedusaRevealDistance)
+            if (!nearest)
                 return;
 
             medusa.WaitForExit = true;
@@ -373,6 +455,14 @@ namespace Odyssey.Cyclops
                 return;
 
             BeginEncounter(site, practice);
+            if (site == sphinx)
+            {
+                if (practice)
+                    sphinxEncounter.BeginPractice();
+                else
+                    sphinxEncounter.Begin();
+                return;
+            }
             if (site == medusa)
             {
                 if (practice)
@@ -403,8 +493,6 @@ namespace Odyssey.Cyclops
             StopApproachAudio(medusaProximityAudio);
             activeSite = site;
             practiceFight = practice;
-            clueCountAtStart = VoyageState.Clues.Count;
-            resultExpiresAt = 0f;
             voyage.SetEncounter(true, practice, site == medusa);
             savedArSession = arSession.enabled;
             savedArCamera = rearCamera.enabled;
@@ -420,6 +508,7 @@ namespace Odyssey.Cyclops
             mapCamera.enabled = false;
             overlay.gameObject.SetActive(false);
             if (cyclopsPreview != null) cyclopsPreview.gameObject.SetActive(false);
+            sphinxEncounter.HidePreview();
             arSession.enabled = true;
             rearCamera.enabled = true;
         }
@@ -430,36 +519,23 @@ namespace Odyssey.Cyclops
             Destroy(activeCyclops.gameObject);
             activeCyclops = null;
             if (!practiceFight)
-            {
-                if (won)
-                {
-                    GameEvents.RequestClue(ClueTier.Specific);
-                    if (VoyageState.Clues.Count == clueCountAtStart)
-                        GameEvents.RaiseClueUnlocked("The Cyclops kept watch beyond the paths sailors usually take.");
-                }
                 GameEvents.RaiseEncounterEnded(EncounterType.Cyclops, won);
-            }
             ReturnToVoyage(won);
         }
 
         private void OnEncounterEnded(EncounterType type, bool won)
         {
-            if (type != EncounterType.Medusa || activeSite != medusa)
+            if ((type != EncounterType.Medusa || activeSite != medusa)
+                && (type != EncounterType.Sphinx || activeSite != sphinx))
                 return;
 
-            if (won && !practiceFight)
-            {
-                resultMessage.text = medusaEncounter.LastClue;
-                resultExpiresAt = Time.unscaledTime + 10f;
-                resultMessage.transform.parent.gameObject.SetActive(true);
-            }
             ReturnToVoyage(won);
         }
 
         private void ReturnToVoyage(bool won)
         {
-            if (!practiceFight)
-                activeSite.Cleared = won;
+            if (!practiceFight && won)
+                activeSite.Cleared = true;
             activeSite = null;
             arSession.enabled = savedArSession;
             rearCamera.enabled = savedArCamera;
@@ -480,16 +556,27 @@ namespace Odyssey.Cyclops
 
             var button = OdysseyTheme.Rect(safePanel, "Face Cyclops", Vector2.zero, Vector2.right,
                 new Vector2(26f, 34f), new Vector2(-26f, 86f));
-            faceCyclops = OdysseyTheme.Button(button, EnterCyclops, true);
+            faceCyclops = OdysseyTheme.Button(button, () => EnterNearbyBoss(cyclops), true);
             OdysseyTheme.Label(OdysseyTheme.Inset(button, "Label", 4), "Face Cyclops", 22, OdysseyTheme.Ink);
+            var sphinxButton = OdysseyTheme.Rect(safePanel, "Face Sphinx", Vector2.zero, Vector2.right,
+                new Vector2(26f, 34f), new Vector2(-26f, 86f));
+            faceSphinx = OdysseyTheme.Button(sphinxButton, () => EnterNearbyBoss(sphinx), true);
+            OdysseyTheme.Label(OdysseyTheme.Inset(sphinxButton, "Label", 4), "Face Sphinx", 22, OdysseyTheme.Ink);
+
+            var closeTest = OdysseyTheme.Rect(safePanel, "Back to home", Vector2.zero, Vector2.right,
+                new Vector2(26f, 34f), new Vector2(-26f, 86f));
+            closeIthacaTest = OdysseyTheme.Button(closeTest, EndIthacaTest);
+            OdysseyTheme.Label(OdysseyTheme.Inset(closeTest, "Label", 4), "Back to home", 20, OdysseyTheme.Ivory);
 
             var result = OdysseyTheme.Rect(safePanel, "Clue", Vector2.up, Vector2.one,
                 new Vector2(24f, -162f), new Vector2(-24f, -78f));
             OdysseyTheme.Tint(result, OdysseyTheme.Ink);
             OdysseyTheme.Frame(result, OdysseyTheme.Bronze, 0);
-            resultMessage = OdysseyTheme.Label(OdysseyTheme.Inset(result, "Clue text", 12), "", 17, OdysseyTheme.Ivory);
+            resultMessage = OdysseyTheme.Label(OdysseyTheme.Inset(result, "Result text", 12), "", 17, OdysseyTheme.Ivory);
 
             faceCyclops.gameObject.SetActive(false);
+            faceSphinx.gameObject.SetActive(false);
+            closeIthacaTest.gameObject.SetActive(false);
             result.gameObject.SetActive(false);
             hud.SetActive(false);
         }
@@ -498,6 +585,8 @@ namespace Odyssey.Cyclops
         {
             StopApproachAudio(cyclopsProximityAudio);
             StopApproachAudio(medusaProximityAudio);
+            if (sphinxEncounter != null)
+                sphinxEncounter.HidePreview();
         }
 
         private void OnDestroy()
