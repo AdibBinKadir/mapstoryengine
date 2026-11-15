@@ -12,7 +12,7 @@ public class SphinxEncounter : MonoBehaviour, IEncounter
     const float MinRecordingSeconds = 0.3f;
     const float RevealPauseSeconds = 1f;
 
-    public float distance = 2.5f;      // metres in front of the camera
+    public float distance = 3.5f;      // metres from the camera to her centre (she is ~2.5 m long)
     public float belowCamera = 1.2f;   // metres below the camera (roughly the floor for a standing player)
 
     SphinxClient client;
