@@ -78,12 +78,8 @@ public class ARKitFaceSignals : MonoBehaviour, IFaceSignals
                 Debug.LogWarning("[ARKitFaceSignals] ARKit Face Tracking package missing: eyes-closed detection off.");
             }
 
-            Camera cam = Camera.main;
-            if (cam == null)
-            {
-                var origin = FindObjectOfType<ARSessionOrigin>();
-                if (origin != null) cam = origin.camera;
-            }
+            var origin = switcher.FaceManager.GetComponent<ARSessionOrigin>();
+            Camera cam = origin == null ? null : origin.camera;
             if (cam != null && face.leftEye != null && face.rightEye != null && face.fixationPoint != null)
             {
                 GazeAngle = GazeMath.GazeAngleDegrees(face.leftEye.position, face.rightEye.position,

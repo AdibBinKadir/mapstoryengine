@@ -1,133 +1,195 @@
+using Odyssey;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Video;
 
-// Medusa's full-screen takeover, built by code so there's no prefab to keep in sync.
 public sealed class MedusaScreen
 {
-    const string ComingText = "MEDUSA IS COMING";
+    private GameObject root;
+    private RawImage portrait;
+    private AspectRatioFitter portraitFitter;
+    private Texture stillImage;
+    private VideoPlayer video;
+    private RectTransform safeArea;
+    private RectTransform countdownPanel;
+    private Text countdown;
+    private RectTransform cluePanel;
+    private Text clue;
+    private RectTransform stonedPanel;
+    private int shownCount;
+    private MedusaPhase phase;
 
-    GameObject root;
-    Image background;
-    RawImage image;
-    GameObject comingText;
-    GameObject cluePanel;
-    Text clueText;
-    GameObject stonedOverlay;
-    MedusaPhase phase;
+    private bool InHunt => phase == MedusaPhase.Danger || phase == MedusaPhase.Clue;
 
-    MedusaScreen() { }
+    private MedusaScreen() { }
 
     public static MedusaScreen Create(Texture medusaImage)
     {
-        var s = new MedusaScreen();
-        Font font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-
-        s.root = new GameObject("MedusaScreen");
-        var canvas = s.root.AddComponent<Canvas>();
+        var screen = new MedusaScreen();
+        screen.root = new GameObject("Medusa", typeof(RectTransform));
+        var canvas = screen.root.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 100;
-        var scaler = s.root.AddComponent<CanvasScaler>();
+        var scaler = screen.root.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1179f, 2556f);
-        scaler.matchWidthOrHeight = 0.5f;
-        s.root.AddComponent<GraphicRaycaster>();   // swallows taps meant for the AR view underneath
+        scaler.referenceResolution = new Vector2(390, 844);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+        screen.root.AddComponent<GraphicRaycaster>();
+        Transform root = screen.root.transform;
 
-        s.background = Child<Image>(s.root.transform, "Background");
-        s.background.color = Color.black;
+        OdysseyTheme.Tint(OdysseyTheme.Inset(root, "Backdrop", 0), OdysseyTheme.Ink, true);
+        RectTransform holder = OdysseyTheme.Inset(root, "Portrait crop", 0);
+        holder.gameObject.AddComponent<RectMask2D>();
+        screen.portrait = OdysseyTheme.Inset(holder, "Medusa portrait", 0).gameObject.AddComponent<RawImage>();
+        screen.portrait.raycastTarget = false;
+        screen.portraitFitter = screen.portrait.gameObject.AddComponent<AspectRatioFitter>();
+        screen.portraitFitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+        screen.stillImage = medusaImage;
+        screen.SetPortrait(medusaImage);
 
-        // Image sits in a full-stretch holder; the fitter envelopes it so it fills without stretching.
-        var holder = Child<RectMask2D>(s.root.transform, "ImageHolder");
-        s.image = Child<RawImage>(holder.transform, "Image");
-        s.image.texture = medusaImage;
-        var fitter = s.image.gameObject.AddComponent<AspectRatioFitter>();
-        fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
-        fitter.aspectRatio = medusaImage != null && medusaImage.height > 0
-            ? (float)medusaImage.width / medusaImage.height
-            : 474f / 1024f;
+        screen.safeArea = OdysseyTheme.Inset(root, "Safe area", 0);
+        OdysseyTheme.Frame(screen.safeArea, OdysseyTheme.Bronze, 12);
+        var center = new Vector2(0.5f, 0.5f);
+        screen.countdownPanel = OdysseyTheme.Rect(screen.safeArea, "Countdown", center, center,
+            new Vector2(-158, -124), new Vector2(158, 124));
+        OdysseyTheme.Tint(screen.countdownPanel, OdysseyTheme.Ink);
+        OdysseyTheme.Frame(screen.countdownPanel, OdysseyTheme.Bronze, 0);
+        OdysseyTheme.Label(OdysseyTheme.Rect(screen.countdownPanel, "Heading", Vector2.up, Vector2.one,
+            new Vector2(12, -62), new Vector2(-12, -16)), "Medusa is coming", 30, OdysseyTheme.Ivory);
+        screen.countdown = OdysseyTheme.Label(OdysseyTheme.Rect(screen.countdownPanel, "Count", center, center,
+            new Vector2(-90, -46), new Vector2(90, 54)), "", 76, OdysseyTheme.Gold);
+        OdysseyTheme.Label(OdysseyTheme.Rect(screen.countdownPanel, "Instruction", Vector2.zero, Vector2.right,
+            new Vector2(14, 18), new Vector2(-14, 64)), "Look away or close your eyes.", 19, OdysseyTheme.Ivory);
 
-        var coming = Label(s.root.transform, "ComingText", font, 90, FontStyle.Bold);
-        coming.text = ComingText;
-        s.comingText = coming.gameObject;
+        screen.cluePanel = OdysseyTheme.Rect(screen.safeArea, "Clue", Vector2.zero, Vector2.right,
+            new Vector2(24, 34), new Vector2(-24, 134));
+        OdysseyTheme.Tint(screen.cluePanel, OdysseyTheme.Ink);
+        OdysseyTheme.Frame(screen.cluePanel, OdysseyTheme.Bronze, 0);
+        screen.clue = OdysseyTheme.Label(OdysseyTheme.Inset(screen.cluePanel, "Clue text", 14),
+            "", 19, OdysseyTheme.Ivory);
 
-        var panel = Child<Image>(s.root.transform, "CluePanel");
-        panel.color = new Color(0f, 0f, 0f, 0.7f);
-        var panelRect = panel.rectTransform;
-        panelRect.anchorMin = new Vector2(0f, 0f);
-        panelRect.anchorMax = new Vector2(1f, 0.2f);
-        s.cluePanel = panel.gameObject;
-        s.clueText = Label(panel.transform, "ClueText", font, 54, FontStyle.Normal);
-        s.clueText.rectTransform.offsetMin = new Vector2(48f, 24f);
-        s.clueText.rectTransform.offsetMax = new Vector2(-48f, -24f);
+        screen.stonedPanel = OdysseyTheme.Rect(screen.safeArea, "Stoned", center, center,
+            new Vector2(-158, -86), new Vector2(158, 86));
+        OdysseyTheme.Tint(screen.stonedPanel, OdysseyTheme.Ink);
+        OdysseyTheme.Frame(screen.stonedPanel, OdysseyTheme.Bronze, 0);
+        OdysseyTheme.Label(OdysseyTheme.Rect(screen.stonedPanel, "Heading", Vector2.up, Vector2.one,
+            new Vector2(12, -93), new Vector2(-12, -21)), "Stoned", 44, OdysseyTheme.Gold);
+        OdysseyTheme.Label(OdysseyTheme.Rect(screen.stonedPanel, "Explanation", Vector2.zero, Vector2.right,
+            new Vector2(14, 18), new Vector2(-14, 72)), "You looked into Medusa's eyes.", 19, OdysseyTheme.Ivory);
 
-        var stoned = Child<Image>(s.root.transform, "StonedOverlay");
-        stoned.color = new Color(0.5f, 0.5f, 0.5f, 0.6f);
-        var stonedText = Label(stoned.transform, "StonedText", font, 60, FontStyle.Normal);
-        stonedText.supportRichText = true;
-        stonedText.text = "<size=140><b>STONED</b></size>\nYou looked into Medusa's eyes.";
-        s.stonedOverlay = stoned.gameObject;
+        OdysseyTheme.FitSafeArea(screen.safeArea);
+        screen.Show(MedusaPhase.Hijack);
+        screen.PrepareVideo();
+        return screen;
+    }
 
-        s.Show(MedusaPhase.Hijack);
-        return s;
+    private void SetPortrait(Texture texture)
+    {
+        portrait.texture = texture;
+        portraitFitter.aspectRatio = texture != null ? (float)texture.width / texture.height : 474f / 1024f;
+    }
+
+    private void PrepareVideo()
+    {
+        var clip = Resources.Load<VideoClip>("MedusaLoop");
+        if (clip == null)
+            return;
+
+        video = root.AddComponent<VideoPlayer>();
+        video.playOnAwake = false;
+        video.isLooping = true;
+        video.clip = clip;
+        video.renderMode = VideoRenderMode.APIOnly;
+        video.audioOutputMode = VideoAudioOutputMode.Direct;
+        if (clip.audioTrackCount > 0)
+        {
+            video.controlledAudioTrackCount = 1;
+            video.EnableAudioTrack(0, true);
+            if (video.canSetDirectAudioVolume)
+                video.SetDirectAudioVolume(0, 0.65f);
+        }
+        video.prepareCompleted += OnVideoPrepared;
+        video.errorReceived += OnVideoError;
+        video.Prepare();
+    }
+
+    private void OnVideoPrepared(VideoPlayer player)
+    {
+        if (InHunt)
+            player.Play();
+    }
+
+    private void OnVideoError(VideoPlayer player, string message)
+    {
+        Debug.LogWarning("[Medusa] Video failed, showing the still image: " + message);
+        StopVideo();
+        SetPortrait(stillImage);
     }
 
     public void Show(MedusaPhase newPhase)
     {
+        bool wasInHunt = InHunt;
         phase = newPhase;
-        bool showImage = newPhase == MedusaPhase.Hijack || newPhase == MedusaPhase.Danger
-            || newPhase == MedusaPhase.Clue || newPhase == MedusaPhase.Stoned;
-        bool visible = newPhase != MedusaPhase.Won && newPhase != MedusaPhase.Aborted;
+        if (video != null && video.isPrepared && wasInHunt != InHunt)
+        {
+            if (InHunt)
+                video.Play();
+            else
+                video.Pause();
+        }
+        root.SetActive(phase != MedusaPhase.Won && phase != MedusaPhase.Aborted);
+        portrait.enabled = phase != MedusaPhase.Coming;
+        countdownPanel.gameObject.SetActive(phase == MedusaPhase.Coming);
+        cluePanel.gameObject.SetActive(phase == MedusaPhase.Clue && !string.IsNullOrEmpty(clue.text));
+        stonedPanel.gameObject.SetActive(phase == MedusaPhase.Stoned);
+    }
 
-        root.SetActive(visible);
-        background.enabled = visible;
-        image.enabled = showImage;
-        comingText.SetActive(newPhase == MedusaPhase.Coming);
-        cluePanel.SetActive(newPhase == MedusaPhase.Clue && !string.IsNullOrEmpty(clueText.text));   // never a blank box
-        stonedOverlay.SetActive(newPhase == MedusaPhase.Stoned);
+    public bool SetCountdown(int count)
+    {
+        if (shownCount == count)
+            return false;
+
+        shownCount = count;
+        countdown.text = count.ToString();
+        return true;
     }
 
     public void SetClue(string text)
     {
-        clueText.text = text;
-        cluePanel.SetActive(phase == MedusaPhase.Clue && !string.IsNullOrEmpty(text));
+        clue.text = text;
+        cluePanel.gameObject.SetActive(phase == MedusaPhase.Clue && !string.IsNullOrEmpty(text));
     }
 
     public void UpdateEffects(float time)
     {
-        float alpha = phase == MedusaPhase.Hijack ? 0.4f + 0.6f * Mathf.Abs(Mathf.Sin(time * 40f)) : 1f;
-        Color c = image.color;
-        c.a = alpha;
-        image.color = c;
+        OdysseyTheme.FitSafeArea(safeArea);
+        if (InHunt && video != null && video.frame >= 0)
+        {
+            Texture frame = video.texture;
+            if (frame != null && portrait.texture != frame)
+                SetPortrait(frame);
+        }
+        Color tint = Color.white;
+        if (phase == MedusaPhase.Hijack)
+            tint.a = 0.4f + 0.6f * Mathf.Abs(Mathf.Sin(time * 40f));
+        portrait.color = tint;
     }
 
     public void Destroy()
     {
+        StopVideo();
         if (root != null) Object.Destroy(root);
         root = null;
     }
 
-    static T Child<T>(Transform parent, string name) where T : Component
+    private void StopVideo()
     {
-        var go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        var rect = (RectTransform)go.transform;
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
-        rect.offsetMin = Vector2.zero;
-        rect.offsetMax = Vector2.zero;
-        return go.AddComponent<T>();
-    }
+        if (video == null)
+            return;
 
-    static Text Label(Transform parent, string name, Font font, int size, FontStyle style)
-    {
-        var t = Child<Text>(parent, name);
-        t.font = font;
-        t.fontSize = size;
-        t.fontStyle = style;
-        t.color = Color.white;
-        t.alignment = TextAnchor.MiddleCenter;
-        t.horizontalOverflow = HorizontalWrapMode.Wrap;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
-        t.raycastTarget = false;
-        return t;
+        video.prepareCompleted -= OnVideoPrepared;
+        video.errorReceived -= OnVideoError;
+        video.Stop();
+        video = null;
     }
 }

@@ -16,6 +16,9 @@ public sealed class MedusaTimeline
     float lookingTime;
 
     public MedusaPhase Phase { get; private set; }
+    public int Countdown => Phase == MedusaPhase.Coming
+        ? Math.Max(1, (int)Math.Ceiling(ComingSeconds - phaseTime))
+        : 0;
     public bool IsOver { get; private set; }
     public bool ClueReached { get; private set; }   // true once Clue was entered, even if a hitch passed straight through it
 

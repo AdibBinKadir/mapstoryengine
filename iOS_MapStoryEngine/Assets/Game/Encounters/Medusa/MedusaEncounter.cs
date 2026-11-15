@@ -1,3 +1,4 @@
+using Odyssey;
 using UnityEngine;
 
 // Medusa hijacks the screen. Keep your eyes off it; her clue flashes for 2 s at a random moment.
@@ -18,11 +19,29 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
     bool clueShown;
     float clueRequestedAt;
     bool warnedNoFace;
+    bool practiceRun;
+    AudioSource cues;
 
     public EncounterType Type { get { return EncounterType.Medusa; } }
     public bool IsRunning { get; private set; }
+    public string LastClue { get; private set; }
+
+    void Awake()
+    {
+        cues = OdysseyEncounterAudio.CreateSource(gameObject);
+    }
 
     public void Begin()
+    {
+        Begin(false);
+    }
+
+    internal void BeginPractice()
+    {
+        Begin(true);
+    }
+
+    private void Begin(bool practice)
     {
         if (IsRunning)
         {
@@ -30,7 +49,9 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
             return;
         }
 
+        practiceRun = practice;
         IsRunning = true;
+        LastClue = null;
         streaming = false;
         clueRequested = false;
         waitingForClue = false;
@@ -40,8 +61,9 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
         lastPhase = timeline.Phase;
         screen = MedusaScreen.Create(medusaImage);
         screen.Show(MedusaPhase.Hijack);
+        cues.PlayOneShot(OdysseyEncounterAudio.MedusaReveal, 0.56f);
 
-        GameEvents.RaiseEncounterStarted(EncounterType.Medusa);
+        if (!practiceRun) GameEvents.RaiseEncounterStarted(EncounterType.Medusa);
         if (Services.CameraMode != null) Services.CameraMode.EnterFrontCameraMode();
     }
 
@@ -54,7 +76,7 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
 
     void Update()
     {
-        if (!IsRunning) return;
+        if (!IsRunning || !Application.isFocused) return;
 
         MedusaPhase phase = timeline.Tick(Time.unscaledDeltaTime, IsLooking());
         screen.UpdateEffects(Time.unscaledTime);
@@ -67,13 +89,19 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
             if (!IsRunning) return;
         }
 
+        if (phase == MedusaPhase.Coming && screen.SetCountdown(timeline.Countdown))
+            cues.PlayOneShot(OdysseyEncounterAudio.Countdown, 0.45f);
+
         if (waitingForClue && !clueShown && Time.unscaledTime - clueRequestedAt >= ClueAnswerTimeoutSeconds)
+        {
             ShowClue(FallbackClue);
+            GameEvents.RaiseClueUnlocked(FallbackClue);
+        }
 
         if (phase == MedusaPhase.Stoned && timeline.IsOver)
         {
             Finish(false);
-            KillPlayer();
+            if (!practiceRun) KillPlayer();
         }
     }
 
@@ -89,12 +117,23 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
         // A frame hitch can pass straight through Clue (to Won or Stoned); the clue is still earned.
         if (timeline.ClueReached && !clueRequested) RequestClue();
 
-        if (phase == MedusaPhase.Won) Finish(true);
+        if (phase == MedusaPhase.Stoned)
+            cues.PlayOneShot(OdysseyEncounterAudio.Stoned, 0.58f);
+        if (phase == MedusaPhase.Won)
+        {
+            cues.PlayOneShot(OdysseyEncounterAudio.Victory, 0.55f);
+            Finish(true);
+        }
     }
 
     void RequestClue()
     {
         clueRequested = true;
+        if (practiceRun)
+        {
+            ShowClue(FallbackClue);
+            return;
+        }
         waitingForClue = true;
         clueRequestedAt = Time.unscaledTime;
         GameEvents.ClueUnlocked += OnClueUnlocked;
@@ -110,6 +149,7 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
     void ShowClue(string text)
     {
         clueShown = true;
+        LastClue = text;
         screen.SetClue(text);
     }
 
@@ -130,6 +170,11 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
     void Finish(bool won)
     {
         IsRunning = false;   // first, so a re-entrant Abort() from an event handler is ignored
+        if (won && string.IsNullOrEmpty(LastClue))
+        {
+            LastClue = FallbackClue;
+            if (!practiceRun) GameEvents.RaiseClueUnlocked(LastClue);
+        }
         GameEvents.ClueUnlocked -= OnClueUnlocked;
         waitingForClue = false;
         if (streaming && Services.Face != null) Services.Face.StopStreaming();
