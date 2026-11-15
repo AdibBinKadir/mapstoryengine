@@ -40,9 +40,13 @@ namespace Mapbox.Unity.MeshGeneration.Factories
 
 		GameObject _directionsGO;
 		private bool _recalculateNext;
+		private bool _routeSuppressed;
 
 		protected virtual void Awake()
 		{
+			if (_routeSuppressed)
+				return;
+
 			if (_map == null)
 			{
 				_map = FindObjectOfType<AbstractMap>();
@@ -54,6 +58,9 @@ namespace Mapbox.Unity.MeshGeneration.Factories
 
 		public void Start()
 		{
+			if (_routeSuppressed)
+				return;
+
 			_cachedWaypoints = new List<Vector3>(_waypoints.Length);
 			foreach (var item in _waypoints)
 			{
@@ -71,12 +78,37 @@ namespace Mapbox.Unity.MeshGeneration.Factories
 
 		protected virtual void OnDestroy()
 		{
+			UnsubscribeFromMap();
+		}
+
+		internal void SuppressRoute()
+		{
+			_routeSuppressed = true;
+			enabled = false;
+			UnsubscribeFromMap();
+			StopAllCoroutines();
+			if (_directionsGO != null)
+			{
+				_directionsGO.SetActive(false);
+				Destroy(_directionsGO);
+				_directionsGO = null;
+			}
+		}
+
+		private void UnsubscribeFromMap()
+		{
+			if (_map == null)
+				return;
+
 			_map.OnInitialized -= Query;
 			_map.OnUpdated -= Query;
 		}
 
 		void Query()
 		{
+			if (_routeSuppressed || !isActiveAndEnabled)
+				return;
+
 			var count = _waypoints.Length;
 			var wp = new Vector2d[count];
 			for (int i = 0; i < count; i++)
@@ -113,7 +145,7 @@ namespace Mapbox.Unity.MeshGeneration.Factories
 
 		void HandleDirectionsResponse(DirectionsResponse response)
 		{
-			if (response == null || null == response.Routes || response.Routes.Count < 1)
+			if (_routeSuppressed || !isActiveAndEnabled || response == null || response.Routes == null || response.Routes.Count < 1)
 			{
 				return;
 			}

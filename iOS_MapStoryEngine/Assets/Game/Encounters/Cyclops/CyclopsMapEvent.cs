@@ -44,10 +44,9 @@ namespace Odyssey.Cyclops
         private RectTransform marker;
         private Button enter;
         private Title title;
-        private Button continueJourney;
-        private Button testButton;
-        private bool journeyStarting;
+        private VoyageInterface voyage;
         private bool testFight;
+        private int clueCountAtStart;
         private bool savedMapCamera;
         private bool savedStory;
         private bool savedMapTouch;
@@ -104,8 +103,8 @@ namespace Odyssey.Cyclops
             }
 
             mapCamera = mapTouch == null ? null : mapTouch.GetComponent<Camera>();
-            if (map == null || mapCamera == null || arOrigin == null || arOrigin.camera == null
-                || arSession == null || storyCanvas == null)
+            if (map == null || title == null || mapCamera == null || arOrigin == null || arOrigin.camera == null
+                || arSession == null || storyCanvas == null || mapTools == null)
             {
                 Debug.LogWarning("Cyclops could not find the map or rear AR camera.", this);
                 enabled = false;
@@ -114,7 +113,10 @@ namespace Odyssey.Cyclops
 
             storyRaycaster = storyCanvas.GetComponent<GraphicRaycaster>();
             CreateMapHud();
-            ConfigureTitleMenu();
+            OdysseyTheme.StyleLegacyCanvas(storyCanvas.transform);
+            var route = new VoyageRoute(scene, story, mapCamera, mapTouch, mapTools, title);
+            voyage = VoyageInterface.Create(arSession, arOrigin.camera, route, TestCyclops,
+                () => cave.HasValue, () => cleared);
             HideLegacyButton(mapTools.transform.Find("ManualTrigger_Button_5_3"));
         }
 
@@ -122,12 +124,6 @@ namespace Odyssey.Cyclops
         {
             if (overlay == null)
                 return;
-
-            if (journeyStarting && continueJourney.isActiveAndEnabled)
-            {
-                journeyStarting = false;
-                continueJourney.onClick.Invoke();
-            }
 
             if (locationProvider == null)
             {
@@ -152,7 +148,7 @@ namespace Odyssey.Cyclops
             distanceLabel.text = usable
                 ? "Cyclops Cave  ·  " + Math.Round(CyclopsLocation.Distance(location.LatitudeLongitude, cave.Value)) + " m"
                 : "Cyclops Cave  ·  Waiting for accurate GPS";
-            enter.gameObject.SetActive(gate.CanEnter(Now));
+            enter.gameObject.SetActive(VoyageState.Health > 0 && gate.CanEnter(Now));
 
             Vector3 pixel = mapCamera.WorldToScreenPoint(map.GeoToWorldPosition(cave.Value, false) + Vector3.up);
             marker.gameObject.SetActive(pixel.z > 0 && Screen.safeArea.Contains(pixel));
@@ -221,13 +217,13 @@ namespace Odyssey.Cyclops
 
         private void EnterCave()
         {
-            if (MapIsVisible() && gate.CanEnter(Now) && !cleared)
+            if (MapIsVisible() && gate.CanEnter(Now) && !cleared && VoyageState.Health > 0)
                 OpenFight(false);
         }
 
         private void TestCyclops()
         {
-            if (title.isActiveAndEnabled && !journeyStarting && activeFight == null)
+            if (activeFight == null)
                 OpenFight(true);
         }
 
@@ -241,6 +237,7 @@ namespace Odyssey.Cyclops
             }
 
             testFight = testing;
+            clueCountAtStart = VoyageState.Clues.Count;
             savedMapCamera = mapCamera.enabled;
             savedStory = story.enabled;
             savedMapTouch = mapTouch.enabled;
@@ -260,8 +257,11 @@ namespace Odyssey.Cyclops
             arOrigin.camera.enabled = true;
 
             activeFight = Instantiate(prefab, transform);
+            voyage.SetEncounter(true, testing);
             activeFight.Begin(arOrigin.camera, arOrigin.transform, Application.isEditor, CloseFight,
-                testing ? "Back to Title" : "Back to Map");
+                testing ? "Return to voyage" : "Back to chart", !testing);
+            if (!testing)
+                GameEvents.RaiseEncounterStarted(EncounterType.Cyclops);
         }
 
         private void CloseFight(bool won)
@@ -276,7 +276,15 @@ namespace Odyssey.Cyclops
             {
                 cleared = won;
                 gate = new CyclopsLocation();
+                if (won)
+                {
+                    GameEvents.RequestClue(ClueTier.Specific);
+                    if (VoyageState.Clues.Count == clueCountAtStart)
+                        GameEvents.RaiseClueUnlocked("The Cyclops hid his cave away from the marked stops. Look beyond the landmarks as you explore.");
+                }
+                GameEvents.RaiseEncounterEnded(EncounterType.Cyclops, won);
             }
+            voyage.SetEncounter(false);
             arSession.enabled = savedArSession;
             arOrigin.camera.enabled = savedArCamera;
             storyCanvas.enabled = savedCanvas;
@@ -285,52 +293,6 @@ namespace Odyssey.Cyclops
             mapCamera.enabled = savedMapCamera;
             mapTouch.enabled = savedMapTouch;
             story.enabled = savedStory;
-        }
-
-        private void ConfigureTitleMenu()
-        {
-            if (title == null)
-                return;
-
-            Transform panel = title.transform;
-            Transform titleObject = panel.Find("Title_Text_1_1");
-            Transform search = panel.Find("SearchLocations_Button_1_2");
-            Transform next = panel.Find("Continue_Button_1_3");
-            if (titleObject == null || search == null || next == null)
-            {
-                Debug.LogWarning("Could not find the Return to Ithaca title controls.", this);
-                return;
-            }
-
-            var heading = titleObject.GetComponent<Text>();
-            heading.text = "Return to Ithaca";
-            heading.fontSize = 112;
-            heading.alignment = TextAnchor.MiddleCenter;
-            heading.raycastTarget = false;
-            heading.rectTransform.anchorMin = new Vector2(0.08f, 0.59f);
-            heading.rectTransform.anchorMax = new Vector2(0.92f, 0.85f);
-            heading.rectTransform.offsetMin = heading.rectTransform.offsetMax = Vector2.zero;
-
-            var start = search.GetComponent<Button>();
-            var startLabel = start.GetComponentInChildren<Text>(true);
-            startLabel.text = "Start Journey";
-            var startRect = (RectTransform)search;
-            startRect.anchorMin = startRect.anchorMax = new Vector2(0.5f, 0.33f);
-            startRect.anchoredPosition = Vector2.zero;
-            search.gameObject.SetActive(true);
-
-            continueJourney = next.GetComponent<Button>();
-            HideLegacyButton(next);
-            start.onClick.AddListener(() =>
-            {
-                journeyStarting = true;
-                testButton.gameObject.SetActive(false);
-            });
-
-            var testRect = CyclopsView.Place(panel, "Test Cyclops", new Vector2(0.5f, 0.33f),
-                new Vector2(0.5f, 0.5f), new Vector2(0, -125), new Vector2(450, 90));
-            testButton = CyclopsView.Button(testRect, "Test Cyclops", TestCyclops);
-            testButton.GetComponentInChildren<Text>().fontSize = 36;
         }
 
         private static void HideLegacyButton(Transform button)
@@ -354,16 +316,16 @@ namespace Odyssey.Cyclops
             safePanel = CyclopsView.Place(hud.transform, "Safe area", top, top, Vector2.zero, Vector2.zero);
             marker = CyclopsView.Place(hud.transform, "Cave marker", bottom, bottom,
                 Vector2.zero, new Vector2(135, 30));
-            CyclopsView.Background(marker, new Color(0.46f, 0.16f, 0.04f, 0.95f));
+            CyclopsView.Background(marker, OdysseyTheme.DeepSea);
             CyclopsView.Label(CyclopsView.Place(marker, "Name", top, top,
                 Vector2.zero, marker.sizeDelta), "Cyclops Cave", 15);
             var distance = CyclopsView.Place(safePanel, "Cave distance", bottom, bottom,
-                new Vector2(0, 100), new Vector2(302, 38));
-            CyclopsView.Background(distance, new Color(0.08f, 0.1f, 0.15f, 0.92f));
+                new Vector2(0, 140), new Vector2(302, 38));
+            CyclopsView.Background(distance, OdysseyTheme.Ink);
             distanceLabel = CyclopsView.Label(CyclopsView.Place(distance, "Distance text", top, top,
                 Vector2.zero, distance.sizeDelta), "", 15);
             enter = CyclopsView.Button(CyclopsView.Place(safePanel, "Enter Cave", bottom, bottom,
-                new Vector2(0, 145), new Vector2(154, 45)), "Enter Cave", EnterCave);
+                new Vector2(0, 185), new Vector2(154, 45)), "Enter Cave", EnterCave);
             hud.SetActive(false);
         }
 

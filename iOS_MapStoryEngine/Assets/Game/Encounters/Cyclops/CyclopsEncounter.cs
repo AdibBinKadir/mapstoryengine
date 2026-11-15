@@ -20,6 +20,7 @@ namespace Odyssey.Cyclops
         private string returnLabel;
         private CyclopsFight fight;
         private bool simulated;
+        private bool useVoyageHealth;
         private bool paused;
         private bool placed;
         private float initialHeight;
@@ -32,13 +33,14 @@ namespace Odyssey.Cyclops
         private Color feedbackColor;
         private MaterialPropertyBlock eyeProperties;
         private RectTransform safePanel;
-        private Text playerHealth;
+        private VoyageHealthBar practiceHealth;
         private Text cyclopsHealth;
         private Text instruction;
         private Text shieldStatus;
-        private Image playerBar;
+
         private Image bossBar;
         private Button resultButton;
+        private CanvasGroup hudVisibility;
         private CyclopsShieldGraphic shield;
         private Text feedback;
         private Image flash;
@@ -50,12 +52,12 @@ namespace Odyssey.Cyclops
         private static AudioClip guardCue;
         private static AudioClip counterCue;
         private static AudioClip victoryCue;
-        private static readonly Color Amber = new Color(1f, 0.72f, 0.28f);
-        private static readonly Color Mint = new Color(0.44f, 0.95f, 0.72f);
-        private static readonly Color Red = new Color(1f, 0.37f, 0.31f);
+        private static readonly Color Amber = OdysseyTheme.Gold;
+        private static readonly Color Mint = new Color32(139, 199, 178, 255);
+        private static readonly Color Red = OdysseyTheme.Red;
 
         internal void Begin(Camera camera, Transform arOrigin, bool simulate, Action<bool> finished,
-            string resultExitLabel = "Back to Map")
+            string resultExitLabel = "Back to Map", bool useVoyageHealth = false)
         {
             viewCamera = camera;
             bossCollider = boss.GetComponent<Collider>();
@@ -63,7 +65,8 @@ namespace Odyssey.Cyclops
             simulated = simulate;
             onExit = finished;
             returnLabel = resultExitLabel;
-            fight = new CyclopsFight();
+            this.useVoyageHealth = useVoyageHealth;
+            fight = new CyclopsFight(useVoyageHealth);
             eyeProperties = new MaterialPropertyBlock();
             idleAnimator = boss.GetComponentInChildren<Animator>(true);
             boss.gameObject.SetActive(false);
@@ -97,8 +100,10 @@ namespace Odyssey.Cyclops
             if (fight == null)
                 return;
 
+            hudVisibility.alpha = Mathf.MoveTowards(hudVisibility.alpha, 1, Time.unscaledDeltaTime * 5f);
             motion?.RestoreIdle();
             CyclopsView.FitSafeArea(safePanel);
+            practiceHealth?.Render(fight.PlayerHp, CyclopsFight.PlayerMax);
             bool tracking = !paused && Application.isFocused
                 && (simulated || ARSession.state == ARSessionState.SessionTracking);
             if (idleAnimator != null)
@@ -159,6 +164,7 @@ namespace Odyssey.Cyclops
             {
                 shield.HideImmediately();
                 resultButton.gameObject.SetActive(true);
+                resultButton.GetComponentInChildren<Text>().text = returnLabel;
             }
             else
             {
@@ -204,12 +210,10 @@ namespace Odyssey.Cyclops
 
         private void UpdateHud(bool raised)
         {
-            playerHealth.text = "ODYSSEUS  " + fight.PlayerHp;
             cyclopsHealth.text = "CYCLOPS  " + fight.BossHp;
-            CyclopsView.SetBar(playerBar, (float)fight.PlayerHp / CyclopsFight.PlayerMax);
             CyclopsView.SetBar(bossBar, (float)fight.BossHp / CyclopsFight.BossMax);
             shieldStatus.text = fight.Finished ? "" : raised ? "Shield up" : "Shield down";
-            shieldStatus.color = raised ? Mint : Color.white;
+            shieldStatus.color = raised ? Mint : OdysseyTheme.Ivory;
 
             bool warning = fight.Current == CyclopsFight.Phase.Warning;
             bool recovery = fight.Current == CyclopsFight.Phase.Recovery;
@@ -232,7 +236,7 @@ namespace Odyssey.Cyclops
                     glow = new Color(0.07f, 0.55f, 0.36f);
                     break;
                 case CyclopsFight.Phase.Won:
-                    instruction.text = "Cyclops defeated";
+                    instruction.text = useVoyageHealth ? "Cyclops defeated. A clue awaits." : "Cyclops defeated";
                     break;
                 case CyclopsFight.Phase.Lost:
                     instruction.text = "The Cyclops defeated you";
@@ -349,6 +353,8 @@ namespace Odyssey.Cyclops
             var hud = new GameObject("Cyclops HUD", typeof(RectTransform));
             hud.transform.SetParent(transform, false);
             CyclopsView.Overlay(hud);
+            hudVisibility = hud.AddComponent<CanvasGroup>();
+            hudVisibility.alpha = 0;
             Vector2 top = new Vector2(0.5f, 1);
             Vector2 bottom = new Vector2(0.5f, 0);
             Vector2 center = new Vector2(0.5f, 0.5f);
@@ -367,19 +373,15 @@ namespace Odyssey.Cyclops
             safePanel = CyclopsView.Place(hud.transform, "Safe area", top, top, Vector2.zero, Vector2.zero);
             CyclopsView.FitSafeArea(safePanel);
 
-            var header = CyclopsView.Place(safePanel, "Combat HUD", top, top, new Vector2(0, -10), new Vector2(0, 116));
+            if (!useVoyageHealth)
+                practiceHealth = new VoyageHealthBar(safePanel);
+            var header = CyclopsView.Place(safePanel, "Combat HUD", top, top, new Vector2(0, -76), new Vector2(0, 116));
             header.anchorMin = new Vector2(0.04f, 1);
             header.anchorMax = new Vector2(0.96f, 1);
-            CyclopsView.Background(header, new Color(0.065f, 0.08f, 0.10f, 0.96f));
-            var trim = CyclopsView.Place(header, "Bronze edge", top, top, Vector2.zero, new Vector2(0, 2));
-            trim.anchorMin = new Vector2(0, 1);
-            trim.anchorMax = new Vector2(1, 1);
-            CyclopsView.Background(trim, new Color(0.69f, 0.46f, 0.21f));
-
-            playerBar = HealthDisplay(header, "Odysseus", "ODYSSEUS  100", 0.05f, 0.47f,
-                new Color(0.88f, 0.65f, 0.32f), out playerHealth);
-            bossBar = HealthDisplay(header, "Cyclops", "CYCLOPS  60", 0.53f, 0.95f,
-                new Color(0.89f, 0.31f, 0.23f), out cyclopsHealth);
+            CyclopsView.Background(header, OdysseyTheme.Ink);
+            OdysseyTheme.Frame(header, OdysseyTheme.Bronze, 0);
+            bossBar = HealthDisplay(header, "Cyclops", "CYCLOPS  60", 0.05f, 0.95f,
+                OdysseyTheme.Red, out cyclopsHealth);
 
             instruction = CyclopsView.Label(StretchRow(header, "Instruction", -48, 24),
                 "Find a clear space to fight.", 16);
@@ -387,22 +389,20 @@ namespace Odyssey.Cyclops
             instruction.resizeTextMinSize = 12;
             instruction.resizeTextMaxSize = 16;
             shieldStatus = CyclopsView.Label(StretchRow(header, "Shield", -74, 19), "Shield waiting", 13);
-            shieldStatus.fontStyle = FontStyle.Bold;
             timingBar = CyclopsView.Bar(StretchRow(header, "Timing", -101, 4), Amber);
             CyclopsView.SetBar(timingBar, 0);
 
             Vector2 feedbackAnchor = new Vector2(0.5f, 0.64f);
             feedback = CyclopsView.Label(CyclopsView.Place(safePanel, "Fight feedback", feedbackAnchor, center,
                 Vector2.zero, new Vector2(310, 52)), "", 25);
-            feedback.fontStyle = FontStyle.Bold;
             var shadow = feedback.gameObject.AddComponent<UnityEngine.UI.Outline>();
             shadow.effectColor = new Color(0.05f, 0.06f, 0.08f, 0.9f);
             shadow.effectDistance = new Vector2(1.7f, -1.7f);
             feedback.gameObject.SetActive(false);
 
             resultButton = CyclopsView.Button(CyclopsView.Place(safePanel, "Continue after fight", bottom, bottom,
-                new Vector2(0, 20), new Vector2(170, 48)), returnLabel, ContinueAfterFight);
-            resultButton.gameObject.SetActive(false);
+                new Vector2(0, 20), new Vector2(178, 48)), useVoyageHealth ? returnLabel : "Leave practice", ContinueAfterFight);
+            resultButton.gameObject.SetActive(!useVoyageHealth);
         }
 
         private static Image HealthDisplay(RectTransform header, string name, string text,
@@ -413,8 +413,7 @@ namespace Odyssey.Cyclops
             column.anchorMin = new Vector2(left, 1);
             column.anchorMax = new Vector2(right, 1);
             label = CyclopsView.Label(StretchRow(column, "Hit points", 0, 20), text, 14);
-            label.fontStyle = FontStyle.Bold;
-            label.color = new Color(0.94f, 0.88f, 0.76f);
+            label.color = OdysseyTheme.Ivory;
             return CyclopsView.Bar(StretchRow(column, "Health bar", -24, 5), color);
         }
 
@@ -429,7 +428,7 @@ namespace Odyssey.Cyclops
 
         private void ContinueAfterFight()
         {
-            if (fight == null || !fight.Finished)
+            if (fight == null || (useVoyageHealth && !fight.Finished))
                 return;
 
             resultButton.interactable = false;
