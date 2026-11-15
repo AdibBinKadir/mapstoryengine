@@ -1,6 +1,7 @@
 using Odyssey;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Video;
 
 public sealed class MedusaScreen
 {
@@ -14,10 +15,15 @@ public sealed class MedusaScreen
     private RectTransform stonedPanel;
     private int shownCount;
     private MedusaPhase phase;
+    private AspectRatioFitter fitter;
+    private VideoPlayer video;
+    private RenderTexture videoTexture;
+    private bool showingVideo;
+    private bool videoFailed;
 
     private MedusaScreen() { }
 
-    public static MedusaScreen Create(Texture medusaImage)
+    public static MedusaScreen Create(Texture medusaImage, VideoClip medusaVideo)
     {
         var screen = new MedusaScreen();
         screen.root = new GameObject("Medusa", typeof(RectTransform));
@@ -37,7 +43,7 @@ public sealed class MedusaScreen
         screen.portrait = OdysseyTheme.Inset(holder, "Medusa portrait", 0).gameObject.AddComponent<RawImage>();
         screen.portrait.texture = medusaImage;
         screen.portrait.raycastTarget = false;
-        var fitter = screen.portrait.gameObject.AddComponent<AspectRatioFitter>();
+        var fitter = screen.fitter = screen.portrait.gameObject.AddComponent<AspectRatioFitter>();
         fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
         fitter.aspectRatio = medusaImage != null ? (float)medusaImage.width / medusaImage.height : 474f / 1024f;
 
@@ -72,8 +78,33 @@ public sealed class MedusaScreen
             new Vector2(14, 18), new Vector2(-14, 72)), "You looked into Medusa's eyes.", 19, OdysseyTheme.Ivory);
 
         OdysseyTheme.FitSafeArea(screen.safeArea);
+        if (medusaVideo != null) screen.AddVideo(medusaVideo);
         screen.Show(MedusaPhase.Hijack);
         return screen;
+    }
+
+    // Plays into a RenderTexture; the portrait keeps the still image until the first video frame arrives.
+    private void AddVideo(VideoClip clip)
+    {
+        videoTexture = new RenderTexture((int)clip.width, (int)clip.height, 0);
+        video = root.AddComponent<VideoPlayer>();
+        video.playOnAwake = false;
+        video.isLooping = true;
+        video.source = VideoSource.VideoClip;
+        video.clip = clip;
+        video.renderMode = VideoRenderMode.RenderTexture;
+        video.targetTexture = videoTexture;
+        video.audioOutputMode = VideoAudioOutputMode.Direct;
+        video.EnableAudioTrack(0, true);
+        video.errorReceived += OnVideoError;
+        video.Prepare();
+    }
+
+    private void OnVideoError(VideoPlayer source, string message)
+    {
+        if (videoFailed) return;
+        videoFailed = true;
+        Debug.LogWarning("[Medusa] Video failed, showing the still image: " + message);
     }
 
     public void Show(MedusaPhase newPhase)
@@ -84,6 +115,16 @@ public sealed class MedusaScreen
         countdownPanel.gameObject.SetActive(phase == MedusaPhase.Coming);
         cluePanel.gameObject.SetActive(phase == MedusaPhase.Clue && !string.IsNullOrEmpty(clue.text));
         stonedPanel.gameObject.SetActive(phase == MedusaPhase.Stoned);
+
+        if (video == null || videoFailed) return;
+        if (MedusaVideoRules.Plays(phase))
+        {
+            if (!video.isPlaying) video.Play();
+        }
+        else if (video.isPlaying)
+        {
+            video.Pause();   // Stoned: her last frame stays, the sound stops
+        }
     }
 
     public void SetCountdown(int count)
@@ -104,6 +145,12 @@ public sealed class MedusaScreen
     public void UpdateEffects(float time)
     {
         OdysseyTheme.FitSafeArea(safeArea);
+        if (!showingVideo && video != null && !videoFailed && video.isPlaying && video.frame > 0)
+        {
+            showingVideo = true;
+            portrait.texture = videoTexture;
+            fitter.aspectRatio = (float)videoTexture.width / videoTexture.height;
+        }
         Color tint = Color.white;
         if (phase == MedusaPhase.Hijack)
             tint.a = 0.4f + 0.6f * Mathf.Abs(Mathf.Sin(time * 40f));
@@ -112,6 +159,18 @@ public sealed class MedusaScreen
 
     public void Destroy()
     {
+        if (video != null)
+        {
+            video.errorReceived -= OnVideoError;
+            video.Stop();
+        }
+        video = null;
+        if (videoTexture != null)
+        {
+            videoTexture.Release();
+            Object.Destroy(videoTexture);
+        }
+        videoTexture = null;
         if (root != null) Object.Destroy(root);
         root = null;
     }

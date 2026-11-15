@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Video;
 
 // Medusa hijacks the screen. Keep your eyes off it; her clue flashes for 2 s at a random moment.
 // Talks to the game only through GameEvents and Services.
@@ -6,8 +7,10 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
 {
     const string FallbackClue = "Ithaca hides from those who dare to look.";
     const float ClueAnswerTimeoutSeconds = 0.2f;
+    const string VideoResource = "MedusaLoop";   // Medusa/Resources/MedusaLoop.mp4
 
     public Texture medusaImage;
+    public VideoClip medusaVideo;   // optional; loaded from Resources when unset (the main game adds Medusa at runtime)
 
     MedusaTimeline timeline;
     MedusaScreen screen;
@@ -52,7 +55,9 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
         warnedNoFace = false;
         timeline = new MedusaTimeline(Random.Range(MedusaTimeline.ClueEarliestSeconds, MedusaTimeline.ClueLatestSeconds));
         lastPhase = timeline.Phase;
-        screen = MedusaScreen.Create(medusaImage);
+        if (medusaVideo == null) medusaVideo = Resources.Load<VideoClip>(VideoResource);
+        if (medusaVideo == null) Debug.LogWarning("[Medusa] No video clip found; showing the still image.");
+        screen = MedusaScreen.Create(medusaImage, medusaVideo);
         screen.Show(MedusaPhase.Hijack);
 
         if (!practiceRun) GameEvents.RaiseEncounterStarted(EncounterType.Medusa);
