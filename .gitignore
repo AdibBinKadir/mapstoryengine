@@ -72,3 +72,18 @@ crashlytics-build.properties
 # Temporary auto-generated Android Assets
 [Aa]ssets/[Ss]treamingAssets/aa.meta
 [Aa]ssets/[Ss]treamingAssets/aa/*
+
+# ---- Team / hackathon additions ----
+# macOS junk
+.DS_Store
+
+# API keys: see the ardyssey credential files near the top of this file
+
+# Editor / IDE
+.idea/
+.vscode/
+
+# Server secrets & Python junk
+server/.env
+__pycache__/
+.venv/

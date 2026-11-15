@@ -1,0 +1,21 @@
+# Unity serialized assets: force LF so Windows and Mac teammates don't fight over line endings,
+# and route them through UnityYAMLMerge if a teammate has configured it (see TEAM_SETUP.md).
+*.unity      text eol=lf merge=unityyamlmerge
+*.prefab     text eol=lf merge=unityyamlmerge
+*.asset      text eol=lf merge=unityyamlmerge
+*.mat        text eol=lf merge=unityyamlmerge
+*.anim       text eol=lf merge=unityyamlmerge
+*.controller text eol=lf merge=unityyamlmerge
+
+# Binary files: never try to diff or merge these
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.psd   binary
+*.fbx   binary
+*.FBX   binary
+*.wav   binary
+*.mp3   binary
+*.ogg   binary
+*.ttf   binary
+*.otf   binary
