@@ -9,6 +9,7 @@ namespace Odyssey.Cyclops
         private const float ShieldHeight = 0.69f;
         private RectTransform viewport;
         private float lift;
+        private float liftVelocity;
 
         internal void Initialize(RectTransform viewport)
         {
@@ -23,31 +24,33 @@ namespace Odyssey.Cyclops
 
         internal void SetRaised(bool raised, float deltaTime)
         {
+            if (deltaTime <= 0f)
+                return;
+
             if (raised && !gameObject.activeSelf && texture != null)
             {
-                lift = 0f;
                 gameObject.SetActive(true);
             }
 
             if (!gameObject.activeSelf)
                 return;
 
-            float duration = raised ? 0.19f : 0.17f;
-            lift = Mathf.MoveTowards(lift, raised ? 1f : 0f, deltaTime / duration);
-            if (!raised && lift <= 0f)
+            float smoothTime = raised ? 0.085f : 0.11f;
+            lift = Mathf.SmoothDamp(lift, raised ? 1f : 0f, ref liftVelocity, smoothTime,
+                Mathf.Infinity, deltaTime);
+            if (!raised && lift < 0.005f)
             {
                 HideImmediately();
                 return;
             }
 
             Vector2 size = viewport.rect.size;
-            float progress = Mathf.SmoothStep(0f, 1f, lift);
             float height = size.y * ShieldHeight;
             rectTransform.sizeDelta = new Vector2(height * texture.width / texture.height, height);
             rectTransform.anchoredPosition = new Vector2(
-                Mathf.Lerp(-size.x * 0.055f, size.x * 0.025f, progress),
-                size.y * Mathf.Lerp(-0.07f, RaisedTop, progress));
-            rectTransform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(-8f, -2f, progress));
+                Mathf.Lerp(-size.x * 0.055f, size.x * 0.025f, lift),
+                size.y * Mathf.Lerp(-0.07f, RaisedTop, lift));
+            rectTransform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Lerp(-8f, -2f, lift));
             canvasRenderer.SetAlpha(Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(lift / 0.22f)));
         }
 
@@ -57,6 +60,7 @@ namespace Odyssey.Cyclops
                 return;
 
             lift = 0f;
+            liftVelocity = 0f;
             canvasRenderer.SetAlpha(0f);
             gameObject.SetActive(false);
         }

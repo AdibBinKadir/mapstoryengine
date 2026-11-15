@@ -1,0 +1,4 @@
+Medieval Flag by Sousinho (https://sketchfab.com/sousinho)
+Source: https://sketchfab.com/3d-models/medieval-flag-b807b00647a7417da3e8654c85f78d87
+License: CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Converted to OBJ, reoriented and rescaled for the AR scene, with the original base-color textures.
