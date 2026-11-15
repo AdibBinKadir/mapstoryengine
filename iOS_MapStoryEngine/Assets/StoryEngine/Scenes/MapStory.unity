@@ -2959,6 +2959,7 @@ GameObject:
   m_Component:
   - component: {fileID: 416570860}
   - component: {fileID: 416570861}
+  - component: {fileID: 416570862}
   m_Layer: 0
   m_Name: StoryManager_15
   m_TagString: Untagged
@@ -2966,6 +2967,19 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
+--- !u!114 &416570862
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 416570859}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2a91159df92fe4a62ab8a57264d4111e, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  medusaImage: {fileID: 2800000, guid: 42c3d78716ee5bc4aa321fea3d7df8a1, type: 3}
 --- !u!4 &416570860
 Transform:
   m_ObjectHideFlags: 0
@@ -11162,8 +11176,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _desiredAccuracyInMeters: 5
-  _updateDistanceInMeters: 5
-  _updateTimeInMilliSeconds: 1000
+  _updateDistanceInMeters: 1
+  _updateTimeInMilliSeconds: 500
   _userHeadingSmoothing: {fileID: 0}
   _deviceOrientationSmoothing: {fileID: 0}
   _editorDebuggingOnly:

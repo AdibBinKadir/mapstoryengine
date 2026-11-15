@@ -17,7 +17,14 @@ namespace Odyssey.Cyclops
         internal Phase Current { get; private set; }
         internal Attack CurrentAttack { get; private set; }
         internal Impact LastImpact { get; private set; }
-        internal int PlayerHp { get; private set; } = PlayerMax;
+        internal int PlayerHp => useVoyageHealth ? VoyageState.Health : practiceHp;
+        private readonly bool useVoyageHealth;
+        private int practiceHp = PlayerMax;
+
+        internal CyclopsFight(bool useVoyageHealth)
+        {
+            this.useVoyageHealth = useVoyageHealth;
+        }
         internal int BossHp { get; private set; } = BossMax;
         internal bool Finished => Current == Phase.Won || Current == Phase.Lost;
         internal bool PerfectWindow => Current == Phase.Warning && remaining <= PerfectSeconds;
@@ -56,7 +63,16 @@ namespace Odyssey.Cyclops
                 case Phase.Warning:
                     LastImpact = !shieldRaised ? Impact.Hit : timedRaise ? Impact.PerfectBlock : Impact.Block;
                     if (LastImpact == Impact.Hit)
-                        PlayerHp = Mathf.Max(0, PlayerHp - 25);
+                    {
+                        if (useVoyageHealth)
+                        {
+                            GameEvents.RequestDamage(25);
+                            if (PlayerHp == 0)
+                                GameEvents.RaisePlayerDied("cyclops");
+                        }
+                        else
+                            practiceHp = Mathf.Max(0, practiceHp - 25);
+                    }
 
                     counters = 0;
                     SetPhase(PlayerHp == 0 ? Phase.Lost : Phase.Recovery,

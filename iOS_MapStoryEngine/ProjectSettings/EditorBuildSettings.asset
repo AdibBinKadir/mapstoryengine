@@ -8,7 +8,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/StoryEngine/Scenes/MapStory.unity
     guid: 8bac9648ace2f45b398381f5d0fe217b
-  - enabled: 1
+  - enabled: 0
     path: Assets/Game/Sandbox/Cyclops.unity
     guid: 5eb702d4ff44d498496854f99830a4b8
   m_configObjects:

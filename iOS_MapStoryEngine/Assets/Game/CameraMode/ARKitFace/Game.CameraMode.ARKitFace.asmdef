@@ -1,0 +1,16 @@
+{
+    "name": "Game.CameraMode.ARKitFace",
+    "references": [
+        "Unity.XR.ARFoundation",
+        "Unity.XR.ARSubsystems",
+        "Unity.XR.ARKit.FaceTracking"
+    ],
+    "autoReferenced": true,
+    "versionDefines": [
+        {
+            "name": "com.unity.xr.arkit-face-tracking",
+            "expression": "1.0.0",
+            "define": "ARKIT_FACE_TRACKING"
+        }
+    ]
+}

@@ -7,7 +7,7 @@ namespace Odyssey.Cyclops
 {
     internal static class CyclopsView
     {
-        private static readonly Color PanelColor = new Color(0.09f, 0.10f, 0.13f, 0.94f);
+        private static readonly Color PanelColor = OdysseyTheme.DeepSea;
 
         internal static Canvas Overlay(GameObject owner)
         {
@@ -16,8 +16,8 @@ namespace Odyssey.Cyclops
             canvas.sortingOrder = 90;
             var scaler = owner.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(414, 896);
-            scaler.matchWidthOrHeight = 0.5f;
+            scaler.referenceResolution = new Vector2(390, 844);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             owner.AddComponent<GraphicRaycaster>();
             return canvas;
         }
@@ -37,19 +37,16 @@ namespace Odyssey.Cyclops
 
         internal static void FitSafeArea(RectTransform panel)
         {
-            Rect safe = Screen.safeArea;
-            panel.anchorMin = new Vector2(safe.xMin / Screen.width, safe.yMin / Screen.height);
-            panel.anchorMax = new Vector2(safe.xMax / Screen.width, safe.yMax / Screen.height);
-            panel.offsetMin = panel.offsetMax = Vector2.zero;
+            OdysseyTheme.FitSafeArea(panel);
         }
 
         internal static Text Label(RectTransform rect, string value, int size = 16)
         {
             var text = rect.gameObject.AddComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            text.font = OdysseyTheme.Font;
             text.fontSize = size;
             text.alignment = TextAnchor.MiddleCenter;
-            text.color = Color.white;
+            text.color = OdysseyTheme.Ivory;
             text.text = value;
             text.raycastTarget = false;
             return text;
@@ -57,11 +54,7 @@ namespace Odyssey.Cyclops
 
         internal static Button Button(RectTransform rect, string value, UnityAction click)
         {
-            var background = Background(rect, PanelColor);
-            background.raycastTarget = true;
-            var button = rect.gameObject.AddComponent<Button>();
-            button.targetGraphic = background;
-            button.onClick.AddListener(click);
+            var button = OdysseyTheme.Button(rect, click);
             Label(Place(rect, "Label", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 Vector2.zero, rect.sizeDelta), value);
             return button;
