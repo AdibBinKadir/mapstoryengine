@@ -17,6 +17,7 @@ public sealed class MedusaTimeline
 
     public MedusaPhase Phase { get; private set; }
     public bool IsOver { get; private set; }
+    public bool ClueReached { get; private set; }   // true once Clue was entered, even if a hitch passed straight through it
 
     public MedusaTimeline(float clueDelaySeconds)
     {
@@ -96,5 +97,6 @@ public sealed class MedusaTimeline
     {
         Phase = phase;
         phaseTime = 0f;
+        if (phase == MedusaPhase.Clue) ClueReached = true;
     }
 }

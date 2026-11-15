@@ -13,6 +13,7 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
     MedusaScreen screen;
     MedusaPhase lastPhase;
     bool streaming;
+    bool clueRequested;
     bool waitingForClue;
     bool clueShown;
     float clueRequestedAt;
@@ -31,6 +32,7 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
 
         IsRunning = true;
         streaming = false;
+        clueRequested = false;
         waitingForClue = false;
         clueShown = false;
         warnedNoFace = false;
@@ -84,17 +86,19 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
             if (Services.Face != null) Services.Face.StartStreaming();
         }
 
-        if (phase == MedusaPhase.Clue)
-        {
-            waitingForClue = true;
-            clueRequestedAt = Time.unscaledTime;
-            GameEvents.ClueUnlocked += OnClueUnlocked;
-            GameEvents.RequestClue(ClueTier.Good);
-        }
-        else if (phase == MedusaPhase.Won)
-        {
-            Finish(true);
-        }
+        // A frame hitch can pass straight through Clue (to Won or Stoned); the clue is still earned.
+        if (timeline.ClueReached && !clueRequested) RequestClue();
+
+        if (phase == MedusaPhase.Won) Finish(true);
+    }
+
+    void RequestClue()
+    {
+        clueRequested = true;
+        waitingForClue = true;
+        clueRequestedAt = Time.unscaledTime;
+        GameEvents.ClueUnlocked += OnClueUnlocked;
+        GameEvents.RequestClue(ClueTier.Good);
     }
 
     void OnClueUnlocked(string text)

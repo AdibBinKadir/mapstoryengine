@@ -81,13 +81,14 @@ public sealed class MedusaScreen
         background.enabled = visible;
         image.enabled = showImage;
         comingText.SetActive(newPhase == MedusaPhase.Coming);
-        cluePanel.SetActive(newPhase == MedusaPhase.Clue);
+        cluePanel.SetActive(newPhase == MedusaPhase.Clue && !string.IsNullOrEmpty(clueText.text));   // never a blank box
         stonedOverlay.SetActive(newPhase == MedusaPhase.Stoned);
     }
 
     public void SetClue(string text)
     {
         clueText.text = text;
+        cluePanel.SetActive(phase == MedusaPhase.Clue && !string.IsNullOrEmpty(text));
     }
 
     public void UpdateEffects(float time)
