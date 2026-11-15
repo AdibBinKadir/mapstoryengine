@@ -8,7 +8,7 @@ Odyssey AR: an open-world, closed-map AR game built on mapstoryengine. Start at 
 - Game code goes in `Android_MapStoryEngine/Assets/Game/`. The vision/LLM server is in `server/` (Python 3.10+, FastAPI, MediaPipe).
 
 ## Hard technical constraints (agents get these wrong)
-- **Unity 2019.x (the team's single agreed version, see PLAN.md), which means C# 7.3.** No records, `init`, switch expressions, nullable reference types, `using` declarations, or default interface methods. Use `UnityWebRequest`, not `HttpClient`.
+- **Unity 2019.4.41f2 (LTS) only, which means C# 7.3.** No records, `init`, switch expressions, nullable reference types, `using` declarations, or default interface methods. Use `UnityWebRequest`, not `HttpClient`.
 - **AR Foundation 3.1.3 / ARCore XR Plugin 3.1.4.** Use `ARSessionOrigin` (NOT `XROrigin`) and `ARSession`. Do NOT use `ARCameraManager.requestedFacingDirection`, `ARCameraManager.TryAcquireLatestCpuImage`, or any other AR Foundation 4+/5+ API. If you're not sure an API exists in 3.1, say so; don't guess.
 - **Camera use per encounter (do not deviate):**
   - Default screen, Sphinx, Cyclops, Hydra: **rear-camera AR**.

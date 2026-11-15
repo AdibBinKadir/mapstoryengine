@@ -48,7 +48,7 @@ Body: raw JPEG bytes (`Content-Type: image/jpeg`), about 320×240, ~5 per second
 - `riddle_answer` comes from the **game**. The LLM only words the riddle, must never reveal the answer, and must never invent clues.
 - The LLM call times out after 8 s. Unity shows one built-in line if the request fails.
 
-## B. C# (Unity 2019.x means C# 7.3: no records, no `switch` expressions, no nullable reference types)
+## B. C# (Unity 2019.4 means C# 7.3: no records, no `switch` expressions, no nullable reference types)
 All game code goes under `Assets/Game/`. The contract files are in `Assets/Game/Core/Contracts/`.
 
 ```csharp

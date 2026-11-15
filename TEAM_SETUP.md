@@ -3,10 +3,10 @@
 Everyone should do this once before writing any code.
 
 ## 1. Install the exact Unity version
-The project is pinned to **Unity 2019.2.11f1**. Any other version will try to upgrade the project and break things for everyone else.
+The team uses **Unity 2019.4.41f2 (LTS)**. Any other version will try to upgrade the project and break things for everyone else.
 
 1. Install [Unity Hub](https://unity.com/download).
-2. Install the editor from this link (it opens Unity Hub): `unityhub://2019.2.11f1/5f859a4cfee5`
+2. Install the editor from this link (it opens Unity Hub): `unityhub://2019.4.41f2/6b23d448b533`
    You can also find it in the [Unity download archive](https://unity.com/releases/editor/archive) under 2019.x.
 3. Add these modules:
    - **Android Build Support**, including the Android SDK & NDK Tools and OpenJDK
@@ -45,12 +45,12 @@ This makes scene and prefab conflicts much easier to resolve. Run it once per ma
 Windows:
 ```bash
 git config merge.unityyamlmerge.name "Unity SmartMerge"
-git config merge.unityyamlmerge.driver "'C:/Program Files/Unity/Hub/Editor/2019.2.11f1/Editor/Data/Tools/UnityYAMLMerge.exe' merge -h -p --force %O %B %A %A"
+git config merge.unityyamlmerge.driver "'C:/Program Files/Unity/Hub/Editor/2019.4.41f2/Editor/Data/Tools/UnityYAMLMerge.exe' merge -h -p --force %O %B %A %A"
 ```
 macOS:
 ```bash
 git config merge.unityyamlmerge.name "Unity SmartMerge"
-git config merge.unityyamlmerge.driver "'/Applications/Unity/Hub/Editor/2019.2.11f1/Unity.app/Contents/Tools/UnityYAMLMerge' merge -h -p --force %O %B %A %A"
+git config merge.unityyamlmerge.driver "'/Applications/Unity/Hub/Editor/2019.4.41f2/Unity.app/Contents/Tools/UnityYAMLMerge' merge -h -p --force %O %B %A %A"
 ```
 
 ## 5. Testing on a phone

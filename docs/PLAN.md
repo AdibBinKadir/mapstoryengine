@@ -2,7 +2,7 @@
 
 **Pitch:** You are Odysseus, starting at **Troy**. Somewhere on a closed real-world map lies **Ithaca**, but nobody tells you where. Vague clues trickle in over time. Better ones must be earned: by out-talking the **Sphinx** (by voice), by surviving **Cyber Medusa** hijacking your phone (don't look at the screen, or you're STONED), and by beating a **Cyclops whose eye has been healed** in an AR boss fight. Meanwhile, invisible **Hydra** poison zones drain you, and killing her only makes more heads.
 
-**Platform:** Android, using the `Android_MapStoryEngine` project. **Everyone uses the same Unity version** (proposed: 2019.4.41f2; confirm as a team).
+**Platform:** Android, using the `Android_MapStoryEngine` project. **Everyone uses Unity 2019.4.41f2 (LTS).** No other version.
 **Demo:** indoors at a table, using **Demo Mode** (fake GPS teleport buttons). Also record a real outdoor run on video as a backup.
 
 > ⚠️ Items marked **TBD** are still being decided. Agents: build the *proposal* only if your human confirms it.
