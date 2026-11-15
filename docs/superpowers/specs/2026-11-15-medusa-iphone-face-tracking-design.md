@@ -56,7 +56,8 @@ The Medusa MVP only works in the Editor, with the keyboard mock. On the phone no
 - It references the AR Foundation, ARSubsystems and ARKit Face Tracking assemblies.
 - The asmdef's `versionDefines` set `ARKIT_FACE_TRACKING` only when the package is installed.
 - With the package: `TryGetBlinks(ARFace face, out float left, out float right)` reads the ARKit blend shapes.
-- Without the package: it returns false. `ARKitFaceSignals` then treats the eyes as open and logs one warning. The game still works, but closing your eyes won't protect you.
+- Without the package it returns false, and the project still compiles.
+- **Correction (final review):** the package also registers ARKit's face subsystem. Without it there is no face tracking at all, so the package is a hard requirement on device. `ARKitFaceSignals` logs one "No face subsystem" warning when `ARFaceManager.subsystem` is null.
 
 **`CameraMode/GazeMath.cs`**, in a small pure assembly `Game.CameraMode.Logic` with EditMode tests:
 - The gaze-angle rule.

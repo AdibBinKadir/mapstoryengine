@@ -14,6 +14,7 @@ public class ARKitFaceSignals : MonoBehaviour, IFaceSignals
     DropoutGrace grace;
     bool streaming;
     bool warnedNoBlinks;
+    bool warnedNoSubsystem;
 
     public bool FaceFound { get; private set; }
     public bool EyesClosed { get; private set; }
@@ -38,6 +39,18 @@ public class ARKitFaceSignals : MonoBehaviour, IFaceSignals
     {
         if (!streaming || switcher == null || switcher.FaceManager == null || !switcher.FaceManager.enabled)
         {
+            Clear();
+            return;
+        }
+
+        if (switcher.FaceManager.subsystem == null)
+        {
+            if (!warnedNoSubsystem)
+            {
+                warnedNoSubsystem = true;
+                Debug.LogWarning("[ARKitFaceSignals] No face subsystem: install com.unity.xr.arkit-face-tracking 3.0.1, " +
+                                 "or this device has no TrueDepth camera. Medusa can't see the player.");
+            }
             Clear();
             return;
         }
@@ -79,7 +92,8 @@ public class ARKitFaceSignals : MonoBehaviour, IFaceSignals
         }
 
         bool raw = GazeMath.Looking(FaceFound, EyesClosed, GazeAngle, gazeMaxDegrees);
-        LookingAtScreen = grace.Step(raw, Time.unscaledDeltaTime);
+        // Seen-closed eyes end "looking" immediately (contract: false whenever EyesClosed); only tracking gaps get grace.
+        LookingAtScreen = grace.Step(raw, FaceFound && EyesClosed, Time.unscaledDeltaTime);
     }
 
     void Clear()

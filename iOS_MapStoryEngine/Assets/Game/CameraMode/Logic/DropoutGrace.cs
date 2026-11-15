@@ -10,6 +10,17 @@ public sealed class DropoutGrace
         this.graceSeconds = graceSeconds;
     }
 
+    // forcedFalse (e.g. eyes seen closed) ends the signal at once: only tracking gaps are bridged.
+    public bool Step(bool raw, bool forcedFalse, float deltaSeconds)
+    {
+        if (forcedFalse)
+        {
+            Reset();
+            return false;
+        }
+        return Step(raw, deltaSeconds);
+    }
+
     public bool Step(bool raw, float deltaSeconds)
     {
         if (raw)
