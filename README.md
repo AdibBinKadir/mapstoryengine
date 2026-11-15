@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="iOS_MapStoryEngine/Assets/Game/UI/Resources/Odyssey/IthacaVoyage.png" alt="Odyssey AR" width="360">
+  <img src="docs/media/banner.png" alt="Return to Ithaca: Odyssey AR" width="100%">
 </p>
 
 <h1 align="center">Odyssey AR</h1>
