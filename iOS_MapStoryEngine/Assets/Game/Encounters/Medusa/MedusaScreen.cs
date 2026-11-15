@@ -20,6 +20,7 @@ public sealed class MedusaScreen
     private RenderTexture videoTexture;
     private bool showingVideo;
     private bool videoFailed;
+    private bool playRequested;
 
     private MedusaScreen() { }
 
@@ -119,11 +120,13 @@ public sealed class MedusaScreen
         if (video == null || videoFailed) return;
         if (MedusaVideoRules.Plays(phase))
         {
-            if (!video.isPlaying) video.Play();
+            if (!playRequested) video.Play();
+            playRequested = true;
         }
-        else if (video.isPlaying)
+        else if (MedusaVideoRules.ShouldPause(phase, playRequested))
         {
-            video.Pause();   // Stoned: her last frame stays, the sound stops
+            video.Pause();   // Stoned: her last frame stays, the sound stops (also cancels a Play() still preparing)
+            playRequested = false;
         }
     }
 

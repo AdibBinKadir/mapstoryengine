@@ -5,4 +5,10 @@ public static class MedusaVideoRules
     {
         return phase == MedusaPhase.Danger || phase == MedusaPhase.Clue;
     }
+
+    // Uses our own "play requested" flag: while the clip is still preparing, isPlaying is false but Play() is pending.
+    public static bool ShouldPause(MedusaPhase phase, bool playRequested)
+    {
+        return playRequested && !Plays(phase);
+    }
 }
