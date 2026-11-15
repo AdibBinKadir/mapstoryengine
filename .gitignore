@@ -70,3 +70,24 @@ crashlytics-build.properties
 # Temporary auto-generated Android Assets
 [Aa]ssets/[Ss]treamingAssets/aa.meta
 [Aa]ssets/[Ss]treamingAssets/aa/*
+
+# ---- Team / hackathon additions ----
+# macOS junk
+.DS_Store
+
+# API keys -- never commit these. Each teammate keeps their own copy locally.
+# Google Places key: Assets/Resources/Secrets/GooglePlacesKey.txt
+**/[Aa]ssets/[Rr]esources/[Ss]ecrets/
+**/[Aa]ssets/[Rr]esources/[Ss]ecrets.meta
+# Mapbox token (written by Unity's Mapbox > Setup window)
+**/[Aa]ssets/[Rr]esources/[Mm]apbox/MapboxConfiguration.txt
+**/[Aa]ssets/[Rr]esources/[Mm]apbox/MapboxConfiguration.txt.meta
+
+# Editor / IDE
+.idea/
+.vscode/
+
+# Server secrets & Python junk
+server/.env
+__pycache__/
+.venv/
