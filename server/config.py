@@ -34,6 +34,10 @@ class Settings:
     groq_stt_model: str
     openai_api_key: str
     openai_stt_model: str
+    elevenlabs_api_key: str
+    elevenlabs_voice_id: str
+    elevenlabs_model: str
+    tts_timeout_s: float
     request_budget_s: float
     stt_timeout_s: float
     llm_timeout_s: float
@@ -52,6 +56,10 @@ def load():
         groq_stt_model=_str("GROQ_STT_MODEL", "whisper-large-v3-turbo") or "whisper-large-v3-turbo",
         openai_api_key=_str("OPENAI_API_KEY"),
         openai_stt_model=_str("OPENAI_STT_MODEL", "whisper-1") or "whisper-1",
+        elevenlabs_api_key=_str("ELEVENLABS_API_KEY"),
+        elevenlabs_voice_id=_str("ELEVENLABS_VOICE_ID"),
+        elevenlabs_model=_str("ELEVENLABS_MODEL", "eleven_flash_v2_5") or "eleven_flash_v2_5",
+        tts_timeout_s=_float("TTS_TIMEOUT_S", 3),
         request_budget_s=_float("REQUEST_BUDGET_S", 7.5),
         stt_timeout_s=_float("STT_TIMEOUT_S", 4),
         llm_timeout_s=_float("LLM_TIMEOUT_S", 8),

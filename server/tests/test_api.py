@@ -3,7 +3,9 @@ import io
 import json
 import wave
 
-from server import sphinx, stt
+import base64
+
+from server import sphinx, stt, tts
 
 STATE = {"event": "intro", "hp": 40, "max_hp": 100, "deaths": 2, "last_event": "stoned",
          "riddle_index": 0, "correct_count": 0}
@@ -102,3 +104,29 @@ def test_talk_real_mode_survives_stt_and_llm_failure(client, real_mode, monkeypa
     monkeypatch.setattr(sphinx, "call_gemini", broken_llm)
     body = talk(client).json()
     assert body["heard"] == "" and body["line"] in sphinx.DEAF_LINES and body["verdict"] == "none"
+
+
+def test_replies_carry_null_audio_without_tts(client):
+    assert client.post("/sphinx", json=STATE).json()["audio"] is None
+    assert talk(client, text="hello").json()["audio"] is None
+
+
+def test_replies_carry_base64_wav_and_speak_line_plus_riddle(client, monkeypatch):
+    spoken = []
+
+    def fake_tts(text, deadline, cache=False):
+        spoken.append((text, cache))
+        return b"RIFFfake"
+
+    monkeypatch.setattr(tts, "speak_wav", fake_tts)
+    body = client.post("/sphinx", json=dict(STATE, riddle_index=-1)).json()
+    assert base64.b64decode(body["audio"]) == b"RIFFfake"
+    assert spoken[-1] == (body["line"] + " " + body["riddle"], False)
+
+
+def test_reveal_audio_uses_the_cache(client, monkeypatch):
+    spoken = []
+    monkeypatch.setattr(tts, "speak_wav", lambda text, deadline, cache=False: spoken.append((text, cache)) or b"RIFF")
+    state = dict(STATE, correct_count=1)
+    body = client.post("/sphinx/talk", data={"state": json.dumps(state), "text": "a man"}).json()
+    assert body["reveal"] is True and spoken[-1] == (sphinx.REVEAL_LINE, True)

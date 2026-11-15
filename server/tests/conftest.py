@@ -3,7 +3,7 @@ import os
 # Before server.config is imported: fake mode, and blank keys so a developer's server/.env
 # never makes the tests call real APIs (load_dotenv doesn't override variables that are set).
 os.environ["FAKE"] = "1"
-for name in ("GEMINI_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY"):
+for name in ("GEMINI_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY", "ELEVENLABS_API_KEY", "ELEVENLABS_VOICE_ID"):
     os.environ[name] = ""
 
 import pytest  # noqa: E402

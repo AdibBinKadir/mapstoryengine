@@ -3,6 +3,7 @@
 Run:  uvicorn server.main:app --host 0.0.0.0 --port 8000   (FAKE=1 for canned replies)
   or: python -m server [--fake]
 """
+import base64
 import json
 import logging
 import time
@@ -11,7 +12,7 @@ from typing import Optional
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
-from . import config, sphinx, stt
+from . import config, sphinx, stt, tts
 from .gaze import GazeDetector, GazeUnavailable
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -47,6 +48,16 @@ def _deadline():
     return time.monotonic() + config.settings.request_budget_s
 
 
+def _with_voice(reply, deadline):
+    """Adds `audio`: base64 WAV of what she says (line, then the riddle), or None."""
+    if reply.get("reveal"):
+        wav = tts.speak_wav(reply["line"], deadline, cache=True)
+    else:
+        wav = tts.speak_wav(" ".join(t for t in (reply.get("line"), reply.get("riddle")) if t), deadline)
+    reply["audio"] = base64.b64encode(wav).decode("ascii") if wav else None
+    return reply
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "fake": config.settings.fake}
@@ -77,7 +88,9 @@ async def frame(request: Request):
 def sphinx_speak(state: SphinxState):
     started = time.monotonic()
     data = state.model_dump()
-    reply = sphinx.fake_speak(data) if config.settings.fake else sphinx.speak(data, _deadline())
+    deadline = _deadline()
+    reply = sphinx.fake_speak(data) if config.settings.fake else sphinx.speak(data, deadline)
+    _with_voice(reply, deadline)
     log.info("/sphinx %s -> %r (%.1fs)", state.event, reply["line"], time.monotonic() - started)
     return reply
 
@@ -100,10 +113,10 @@ def sphinx_talk(
     if text is None and not wav:
         raise HTTPException(400, "send `audio` (WAV) or `text`")
 
+    deadline = _deadline()
     if config.settings.fake:
         reply = sphinx.fake_talk(data, text)
     else:
-        deadline = _deadline()
         heard = text
         if heard is None:
             try:
@@ -112,6 +125,7 @@ def sphinx_talk(
                 log.warning("speech-to-text failed: %s", e)
                 heard = ""
         reply = sphinx.talk(heard, data, deadline)
+    _with_voice(reply, deadline)
     log.info("/sphinx/talk heard=%r verdict=%s reveal=%s -> %r (%.1fs)", reply["heard"], reply["verdict"], reply["reveal"],
              reply["line"], time.monotonic() - started)
     return reply
