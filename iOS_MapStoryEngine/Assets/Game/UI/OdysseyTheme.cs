@@ -24,7 +24,9 @@ namespace Odyssey
                 if (!triedFont || font == null)
                 {
                     triedFont = true;
-                    font = Resources.Load<Font>("Odyssey/CaesarDressing-Regular");
+                    font = Resources.Load<Font>("Odyssey/PF Hellenica Regular");
+                    if (font == null)
+                        font = Resources.Load<Font>("Odyssey/CaesarDressing-Regular");
                     if (font == null)
                     {
                         Debug.LogWarning("Caesar Dressing Regular could not be loaded from Resources/Odyssey/CaesarDressing-Regular.");

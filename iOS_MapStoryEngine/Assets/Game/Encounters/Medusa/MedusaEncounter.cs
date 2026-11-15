@@ -1,30 +1,22 @@
 using Odyssey;
 using UnityEngine;
 
-// Medusa hijacks the screen. Keep your eyes off it; her clue flashes for 2 s at a random moment.
+// Medusa hijacks the screen. Keep your eyes off it until the danger has passed.
 // Talks to the game only through GameEvents and Services.
 public class MedusaEncounter : MonoBehaviour, IEncounter
 {
-    const string FallbackClue = "Ithaca hides from those who dare to look.";
-    const float ClueAnswerTimeoutSeconds = 0.2f;
-
     public Texture medusaImage;
 
     MedusaTimeline timeline;
     MedusaScreen screen;
     MedusaPhase lastPhase;
     bool streaming;
-    bool clueRequested;
-    bool waitingForClue;
-    bool clueShown;
-    float clueRequestedAt;
     bool warnedNoFace;
     bool practiceRun;
     AudioSource cues;
 
     public EncounterType Type { get { return EncounterType.Medusa; } }
     public bool IsRunning { get; private set; }
-    public string LastClue { get; private set; }
 
     void Awake()
     {
@@ -51,11 +43,7 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
 
         practiceRun = practice;
         IsRunning = true;
-        LastClue = null;
         streaming = false;
-        clueRequested = false;
-        waitingForClue = false;
-        clueShown = false;
         warnedNoFace = false;
         timeline = new MedusaTimeline(Random.Range(MedusaTimeline.ClueEarliestSeconds, MedusaTimeline.ClueLatestSeconds));
         lastPhase = timeline.Phase;
@@ -92,12 +80,6 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
         if (phase == MedusaPhase.Coming && screen.SetCountdown(timeline.Countdown))
             cues.PlayOneShot(OdysseyEncounterAudio.Countdown, 0.45f);
 
-        if (waitingForClue && !clueShown && Time.unscaledTime - clueRequestedAt >= ClueAnswerTimeoutSeconds)
-        {
-            ShowClue(FallbackClue);
-            GameEvents.RaiseClueUnlocked(FallbackClue);
-        }
-
         if (phase == MedusaPhase.Stoned && timeline.IsOver)
         {
             Finish(false);
@@ -114,9 +96,6 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
             if (Services.Face != null) Services.Face.StartStreaming();
         }
 
-        // A frame hitch can pass straight through Clue (to Won or Stoned); the clue is still earned.
-        if (timeline.ClueReached && !clueRequested) RequestClue();
-
         if (phase == MedusaPhase.Stoned)
             cues.PlayOneShot(OdysseyEncounterAudio.Stoned, 0.58f);
         if (phase == MedusaPhase.Won)
@@ -124,33 +103,6 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
             cues.PlayOneShot(OdysseyEncounterAudio.Victory, 0.55f);
             Finish(true);
         }
-    }
-
-    void RequestClue()
-    {
-        clueRequested = true;
-        if (practiceRun)
-        {
-            ShowClue(FallbackClue);
-            return;
-        }
-        waitingForClue = true;
-        clueRequestedAt = Time.unscaledTime;
-        GameEvents.ClueUnlocked += OnClueUnlocked;
-        GameEvents.RequestClue(ClueTier.Good);
-    }
-
-    void OnClueUnlocked(string text)
-    {
-        if (!IsRunning || !waitingForClue || clueShown) return;
-        ShowClue(string.IsNullOrEmpty(text) ? FallbackClue : text);
-    }
-
-    void ShowClue(string text)
-    {
-        clueShown = true;
-        LastClue = text;
-        screen.SetClue(text);
     }
 
     bool IsLooking()
@@ -170,13 +122,6 @@ public class MedusaEncounter : MonoBehaviour, IEncounter
     void Finish(bool won)
     {
         IsRunning = false;   // first, so a re-entrant Abort() from an event handler is ignored
-        if (won && string.IsNullOrEmpty(LastClue))
-        {
-            LastClue = FallbackClue;
-            if (!practiceRun) GameEvents.RaiseClueUnlocked(LastClue);
-        }
-        GameEvents.ClueUnlocked -= OnClueUnlocked;
-        waitingForClue = false;
         if (streaming && Services.Face != null) Services.Face.StopStreaming();
         streaming = false;
         if (Services.CameraMode != null) Services.CameraMode.ExitFrontCameraMode();

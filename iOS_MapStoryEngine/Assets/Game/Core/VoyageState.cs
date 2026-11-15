@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Odyssey
@@ -6,18 +5,16 @@ namespace Odyssey
     // One voyage per application session. Scene and encounter lifetimes do not own the player's HP.
     internal static class VoyageState
     {
-        private static readonly List<string> clues = new List<string>();
-
         internal static bool Started { get; private set; }
         internal static bool Won { get; private set; }
         internal static int MaxHealth { get; private set; } = 100;
         internal static int Health { get; private set; } = 100;
-        internal static IReadOnlyList<string> Clues => clues;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void Reset()
         {
             End();
+            EncounterJournal.Restore();
             GameEvents.DamageRequested -= Damage;
             GameEvents.DamageRequested += Damage;
             GameEvents.FullHealRequested -= Heal;
@@ -26,8 +23,10 @@ namespace Odyssey
             GameEvents.PlayerRespawned += Heal;
             GameEvents.PlayerDied -= MarkDead;
             GameEvents.PlayerDied += MarkDead;
-            GameEvents.ClueUnlocked -= RecordClue;
-            GameEvents.ClueUnlocked += RecordClue;
+            GameEvents.EncounterStarted -= EncounterJournal.Begin;
+            GameEvents.EncounterStarted += EncounterJournal.Begin;
+            GameEvents.EncounterEnded -= EncounterJournal.Complete;
+            GameEvents.EncounterEnded += EncounterJournal.Complete;
         }
 
         internal static void Begin()
@@ -45,7 +44,7 @@ namespace Odyssey
             Started = false;
             Won = false;
             Health = MaxHealth = 100;
-            clues.Clear();
+            EncounterJournal.ClearActiveEncounters();
         }
 
         internal static void Complete()
@@ -71,12 +70,6 @@ namespace Odyssey
         private static void MarkDead(string cause)
         {
             Health = 0;
-        }
-
-        private static void RecordClue(string clue)
-        {
-            if (!string.IsNullOrWhiteSpace(clue) && !clues.Contains(clue))
-                clues.Add(clue);
         }
     }
 }

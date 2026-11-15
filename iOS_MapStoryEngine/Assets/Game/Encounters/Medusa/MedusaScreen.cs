@@ -13,8 +13,7 @@ public sealed class MedusaScreen
     private RectTransform safeArea;
     private RectTransform countdownPanel;
     private Text countdown;
-    private RectTransform cluePanel;
-    private Text clue;
+    private RectTransform survivalPanel;
     private RectTransform stonedPanel;
     private int shownCount;
     private MedusaPhase phase;
@@ -61,12 +60,12 @@ public sealed class MedusaScreen
         OdysseyTheme.Label(OdysseyTheme.Rect(screen.countdownPanel, "Instruction", Vector2.zero, Vector2.right,
             new Vector2(14, 18), new Vector2(-14, 64)), "Look away or close your eyes.", 19, OdysseyTheme.Ivory);
 
-        screen.cluePanel = OdysseyTheme.Rect(screen.safeArea, "Clue", Vector2.zero, Vector2.right,
+        screen.survivalPanel = OdysseyTheme.Rect(screen.safeArea, "Survival cue", Vector2.zero, Vector2.right,
             new Vector2(24, 34), new Vector2(-24, 134));
-        OdysseyTheme.Tint(screen.cluePanel, OdysseyTheme.Ink);
-        OdysseyTheme.Frame(screen.cluePanel, OdysseyTheme.Bronze, 0);
-        screen.clue = OdysseyTheme.Label(OdysseyTheme.Inset(screen.cluePanel, "Clue text", 14),
-            "", 19, OdysseyTheme.Ivory);
+        OdysseyTheme.Tint(screen.survivalPanel, OdysseyTheme.Ink);
+        OdysseyTheme.Frame(screen.survivalPanel, OdysseyTheme.Bronze, 0);
+        OdysseyTheme.Label(OdysseyTheme.Inset(screen.survivalPanel, "Survival text", 14),
+            "Keep your eyes averted a little longer.", 19, OdysseyTheme.Ivory);
 
         screen.stonedPanel = OdysseyTheme.Rect(screen.safeArea, "Stoned", center, center,
             new Vector2(-158, -86), new Vector2(158, 86));
@@ -140,7 +139,7 @@ public sealed class MedusaScreen
         root.SetActive(phase != MedusaPhase.Won && phase != MedusaPhase.Aborted);
         portrait.enabled = phase != MedusaPhase.Coming;
         countdownPanel.gameObject.SetActive(phase == MedusaPhase.Coming);
-        cluePanel.gameObject.SetActive(phase == MedusaPhase.Clue && !string.IsNullOrEmpty(clue.text));
+        survivalPanel.gameObject.SetActive(phase == MedusaPhase.Clue);
         stonedPanel.gameObject.SetActive(phase == MedusaPhase.Stoned);
     }
 
@@ -152,12 +151,6 @@ public sealed class MedusaScreen
         shownCount = count;
         countdown.text = count.ToString();
         return true;
-    }
-
-    public void SetClue(string text)
-    {
-        clue.text = text;
-        cluePanel.gameObject.SetActive(phase == MedusaPhase.Clue && !string.IsNullOrEmpty(text));
     }
 
     public void UpdateEffects(float time)

@@ -1,12 +1,9 @@
 using UnityEngine;
 
-// Sandbox stand-in for ClueBook and GameState. B = begin, A = abort, C = toggle clue answers, K = toggle abort-on-death.
+// Sandbox controls for Medusa. B = begin, A = abort, K = toggle abort-on-death.
 [RequireComponent(typeof(MedusaEncounter))]
 public class MedusaSandbox : MonoBehaviour
 {
-    const string TestClue = "TEST CLUE: Ithaca lies past the fountain.";
-
-    public bool answerClues = true;
     public bool abortOnKill = true;
 
     MedusaEncounter encounter;
@@ -29,7 +26,6 @@ public class MedusaSandbox : MonoBehaviour
 
     void OnEnable()
     {
-        GameEvents.ClueRequested += OnClueRequested;
         GameEvents.PlayerDied += OnPlayerDied;
         GameEvents.EncounterStarted += OnEncounterStarted;
         GameEvents.EncounterEnded += OnEncounterEnded;
@@ -37,7 +33,6 @@ public class MedusaSandbox : MonoBehaviour
 
     void OnDisable()
     {
-        GameEvents.ClueRequested -= OnClueRequested;
         GameEvents.PlayerDied -= OnPlayerDied;
         GameEvents.EncounterStarted -= OnEncounterStarted;
         GameEvents.EncounterEnded -= OnEncounterEnded;
@@ -52,14 +47,7 @@ public class MedusaSandbox : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.B)) encounter.Begin();
         if (Input.GetKeyDown(KeyCode.A)) encounter.Abort();
-        if (Input.GetKeyDown(KeyCode.C)) answerClues = !answerClues;
         if (Input.GetKeyDown(KeyCode.K)) abortOnKill = !abortOnKill;
-    }
-
-    void OnClueRequested(ClueTier tier)
-    {
-        Debug.Log("[Sandbox] clue requested: " + tier);
-        if (answerClues) GameEvents.RaiseClueUnlocked(TestClue);
     }
 
     void OnPlayerDied(string cause)
@@ -91,7 +79,7 @@ public class MedusaSandbox : MonoBehaviour
         var arFace = f as ARKitFaceSignals;
         if (arFace != null) face += "  gaze=" + arFace.GazeAngle.ToString("0") + "°";
         GUI.Label(new Rect(10, 10, Screen.width - 20, fontSize * 5),
-            face + "\nanswerClues(C)=" + answerClues + "  abortOnKill(K)=" + abortOnKill +
+            face + "\nabortOnKill(K)=" + abortOnKill +
             "  running=" + encounter.IsRunning + "\nB begin, A abort, F/E/L/M face keys");
 
         float w = Application.isMobilePlatform ? 220f : 120f;
@@ -99,7 +87,6 @@ public class MedusaSandbox : MonoBehaviour
         float y = Screen.height - h - 20f;
         if (GUI.Button(new Rect(10, y, w, h), "Begin")) encounter.Begin();
         if (GUI.Button(new Rect(20 + w, y, w, h), "Abort")) encounter.Abort();
-        if (GUI.Button(new Rect(30 + 2 * w, y, w, h), "Clues: " + (answerClues ? "on" : "off"))) answerClues = !answerClues;
-        if (GUI.Button(new Rect(40 + 3 * w, y, w, h), "Abort on kill: " + (abortOnKill ? "on" : "off"))) abortOnKill = !abortOnKill;
+        if (GUI.Button(new Rect(30 + 2 * w, y, w, h), "Abort on kill: " + (abortOnKill ? "on" : "off"))) abortOnKill = !abortOnKill;
     }
 }

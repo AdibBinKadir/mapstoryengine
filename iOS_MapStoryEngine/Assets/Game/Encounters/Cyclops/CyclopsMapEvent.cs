@@ -47,7 +47,6 @@ namespace Odyssey.Cyclops
         private float cyclopsPreviewHeight;
         private bool sitesPlaced;
         private bool practiceFight;
-        private int clueCountAtStart;
 
         private VoyageSite activeSite;
         private CyclopsEncounter cyclopsPrefab;
@@ -67,7 +66,6 @@ namespace Odyssey.Cyclops
         private RectTransform safePanel;
         private Button faceCyclops;
         private Text resultMessage;
-        private float resultExpiresAt;
 
         private bool CanExplore => voyage != null && voyage.CanExplore && activeSite == null
             && VoyageState.Health > 0 && Application.isFocused
@@ -123,8 +121,7 @@ namespace Odyssey.Cyclops
             OdysseyTheme.StyleLegacyCanvas(storyCanvas.transform);
             VoyageRoute.Prepare(gameObject.scene, mapCamera, mapTouch, mapTools, title);
             voyage = VoyageInterface.Create(arSession, rearCamera,
-                () => OpenEncounter(cyclops, true), () => OpenEncounter(medusa, true),
-                () => sitesPlaced, () => cyclops.Cleared, () => medusa.Cleared);
+                () => OpenEncounter(cyclops, true), () => OpenEncounter(medusa, true));
         }
 
         private void LateUpdate()
@@ -148,7 +145,6 @@ namespace Odyssey.Cyclops
                 return;
 
             CyclopsView.FitSafeArea(safePanel);
-            resultMessage.transform.parent.gameObject.SetActive(Time.unscaledTime < resultExpiresAt);
             if (TryReachIthaca(player))
                 return;
 
@@ -403,8 +399,6 @@ namespace Odyssey.Cyclops
             StopApproachAudio(medusaProximityAudio);
             activeSite = site;
             practiceFight = practice;
-            clueCountAtStart = VoyageState.Clues.Count;
-            resultExpiresAt = 0f;
             voyage.SetEncounter(true, practice, site == medusa);
             savedArSession = arSession.enabled;
             savedArCamera = rearCamera.enabled;
@@ -430,15 +424,7 @@ namespace Odyssey.Cyclops
             Destroy(activeCyclops.gameObject);
             activeCyclops = null;
             if (!practiceFight)
-            {
-                if (won)
-                {
-                    GameEvents.RequestClue(ClueTier.Specific);
-                    if (VoyageState.Clues.Count == clueCountAtStart)
-                        GameEvents.RaiseClueUnlocked("The Cyclops kept watch beyond the paths sailors usually take.");
-                }
                 GameEvents.RaiseEncounterEnded(EncounterType.Cyclops, won);
-            }
             ReturnToVoyage(won);
         }
 
@@ -447,12 +433,6 @@ namespace Odyssey.Cyclops
             if (type != EncounterType.Medusa || activeSite != medusa)
                 return;
 
-            if (won && !practiceFight)
-            {
-                resultMessage.text = medusaEncounter.LastClue;
-                resultExpiresAt = Time.unscaledTime + 10f;
-                resultMessage.transform.parent.gameObject.SetActive(true);
-            }
             ReturnToVoyage(won);
         }
 
@@ -487,7 +467,7 @@ namespace Odyssey.Cyclops
                 new Vector2(24f, -162f), new Vector2(-24f, -78f));
             OdysseyTheme.Tint(result, OdysseyTheme.Ink);
             OdysseyTheme.Frame(result, OdysseyTheme.Bronze, 0);
-            resultMessage = OdysseyTheme.Label(OdysseyTheme.Inset(result, "Clue text", 12), "", 17, OdysseyTheme.Ivory);
+            resultMessage = OdysseyTheme.Label(OdysseyTheme.Inset(result, "Result text", 12), "", 17, OdysseyTheme.Ivory);
 
             faceCyclops.gameObject.SetActive(false);
             result.gameObject.SetActive(false);

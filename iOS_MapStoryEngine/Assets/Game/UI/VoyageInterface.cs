@@ -28,6 +28,12 @@ namespace Odyssey
         private RectTransform safeArea;
         private RectTransform landingSafeArea;
         private RectTransform scrollArea;
+        private RectTransform modalPanel;
+        private RectTransform clueToast;
+        private Canvas hudCanvas;
+        private OracleChat oracle;
+        private ClueJournalView journal;
+        private float clueToastUntil;
         private RectTransform healthRoot;
         private CanvasGroup landing;
         private CanvasGroup navigation;
@@ -45,9 +51,6 @@ namespace Odyssey
         private AudioSource backgroundMusic;
         private UnityAction practice;
         private UnityAction practiceMedusa;
-        private Func<bool> caveDiscovered;
-        private Func<bool> caveCleared;
-        private Func<bool> medusaCleared;
         private Page page;
         private bool launching;
         private bool fighting;
@@ -63,8 +66,7 @@ namespace Odyssey
             && page == Page.None;
 
         internal static VoyageInterface Create(ARSession session, Camera camera,
-            UnityAction practice, UnityAction practiceMedusa, Func<bool> caveDiscovered,
-            Func<bool> caveCleared, Func<bool> medusaCleared)
+            UnityAction practice, UnityAction practiceMedusa)
         {
             var owner = new GameObject("Return to Ithaca UI", typeof(RectTransform));
             var ui = owner.AddComponent<VoyageInterface>();
@@ -73,9 +75,6 @@ namespace Odyssey
             ui.cameraManager = camera.GetComponent<ARCameraManager>();
             ui.practice = practice;
             ui.practiceMedusa = practiceMedusa;
-            ui.caveDiscovered = caveDiscovered;
-            ui.caveCleared = caveCleared;
-            ui.medusaCleared = medusaCleared;
             ui.Build(owner);
             ui.backgroundMusic = OdysseyEncounterAudio.CreateLoop(owner, OdysseyEncounterAudio.VoyageBackground, 0f);
             if (ui.backgroundMusic != null)
@@ -87,9 +86,9 @@ namespace Odyssey
 
         private void Build(GameObject owner)
         {
-            var canvas = owner.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 120;
+            hudCanvas = owner.AddComponent<Canvas>();
+            hudCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            hudCanvas.sortingOrder = 120;
             var scaler = owner.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(390, 844);
@@ -109,6 +108,14 @@ namespace Odyssey
             BuildNavigation();
             BuildModal();
             healthRoot.SetAsLastSibling();
+            clueToast = OdysseyTheme.Rect(safeArea, "New clue notification", Vector2.up, Vector2.one,
+                new Vector2(16, -112), new Vector2(-16, -72));
+            OdysseyTheme.Tint(clueToast, OdysseyTheme.DeepSea);
+            OdysseyTheme.Frame(clueToast, OdysseyTheme.Bronze, 0);
+            OdysseyTheme.Label(OdysseyTheme.Inset(clueToast, "Message", 5),
+                "New Clue Discovered", 17, OdysseyTheme.Gold);
+            clueToast.gameObject.SetActive(false);
+            GameEvents.ClueUnlocked += ShowClueNotification;
             BuildLanding();
             FitScreen();
 
@@ -226,6 +233,7 @@ namespace Odyssey
 
             var panel = OdysseyTheme.Rect(overlay, "Journal page", Vector2.zero, new Vector2(1, 0.60f),
                 new Vector2(14, 14), new Vector2(-14, 0));
+            modalPanel = panel;
             OdysseyTheme.Tint(panel, OdysseyTheme.Ink, true);
             OdysseyTheme.Frame(panel, OdysseyTheme.Bronze, 0);
             OdysseyOrnament.Draw(OdysseyTheme.Rect(panel, "Meander", Vector2.up, Vector2.one,
@@ -257,11 +265,14 @@ namespace Odyssey
             fit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             scroll.viewport = viewport;
             scroll.content = text;
+            journal = new ClueJournalView(viewport);
 
             var footer = OdysseyTheme.Rect(panel, "Panel action", Vector2.zero, Vector2.right,
                 new Vector2(16, 14), new Vector2(-16, 64));
             action = OdysseyTheme.Button(footer, () => pageAction?.Invoke(), true);
             actionLabel = OdysseyTheme.Label(OdysseyTheme.Inset(footer, "Action label", 6), "", 18, OdysseyTheme.Ink);
+            oracle = gameObject.AddComponent<OracleChat>();
+            oracle.Build(panel);
             SetVisible(modal, false);
         }
 
@@ -359,10 +370,14 @@ namespace Odyssey
         private void Open(Page next)
         {
             page = next;
+            oracle.SetVisible(next == Page.Oracle);
             modal.interactable = next != Page.None;
             if (next == Page.None)
                 return;
             modal.blocksRaycasts = true;
+            modalPanel.anchorMax = next == Page.Oracle ? Vector2.one : new Vector2(1, 0.60f);
+            modalPanel.offsetMax = new Vector2(-14, next == Page.Oracle ? -120 : 0);
+            FitModalToKeyboard();
             RefreshPage();
             Canvas.ForceUpdateCanvases();
             scroll.verticalNormalizedPosition = 1;
@@ -371,56 +386,67 @@ namespace Odyssey
         private void RefreshPage()
         {
             nextPageRefresh = Time.unscaledTime + 0.25f;
-            heading.text = PageNames[(int)page];
-            string message;
+            bool isOracle = page == Page.Oracle;
+            bool isJournal = page == Page.Clues;
+            heading.text = isOracle ? "The Oracle" : PageNames[(int)page];
+            scrollArea.gameObject.SetActive(!isOracle);
+            journal.Content.gameObject.SetActive(isJournal);
+            content.gameObject.SetActive(!isJournal);
+            RectTransform displayContent = isJournal ? journal.Content : content.rectTransform;
+            if (scroll.content != displayContent)
+            {
+                scroll.StopMovement();
+                scroll.content = displayContent;
+            }
+
             string label = null;
             pageAction = null;
-            switch (page)
+            if (isJournal)
+                journal.Refresh();
+            else if (page == Page.Locations)
+                content.text = IncludedLocations;
+            else if (page == Page.Rules)
             {
-                case Page.Oracle:
-                    if (VoyageState.Won || VoyageState.Health == 0)
+                content.text = Rules;
+                if (VoyageState.Won || VoyageState.Health == 0)
+                {
+                    label = "Begin a new voyage";
+                    pageAction = () =>
                     {
-                        message = VoyageState.Won ? "You reached Ithaca. Your voyage is complete."
-                            : "Odysseus has fallen. Begin a new voyage to sail again.";
-                        label = "Begin a new voyage";
-                        pageAction = () =>
-                        {
-                            VoyageState.End();
-                            SceneManager.LoadScene(gameObject.scene.buildIndex);
-                        };
-                    }
-                    else if (caveCleared() && medusaCleared())
-                        message = "Both guardians have fallen. Read the clues in your journal.";
-                    else if (caveCleared())
-                        message = "The Cyclops has fallen. Keep exploring through the rear camera.";
-                    else if (caveDiscovered())
-                        message = "Approach the Cyclops and tap Face Cyclops.";
-                    else
-                        message = "Point the rear camera at your surroundings to begin exploring.";
-                    break;
-                case Page.Clues:
-                    message = VoyageState.Clues.Count == 0 ? "Your journal is empty. Clues you earn appear here."
-                        : string.Join("\n\n", VoyageState.Clues);
-                    break;
-                case Page.Locations:
-                    message = IncludedLocations;
-                    break;
-                default:
-                    message = Rules;
+                        VoyageState.End();
+                        OracleChat.ResetConversation();
+                        SceneManager.LoadScene(gameObject.scene.buildIndex);
+                    };
+                }
+                else if (!cameraUnavailable)
+                {
                     label = "Practice Cyclops";
-                    if (!cameraUnavailable && !VoyageState.Won)
-                        pageAction = () => { Open(Page.None); practice(); };
-                    break;
+                    pageAction = () => { Open(Page.None); practice(); };
+                }
             }
-            if (content.text != message)
-                content.text = message;
-            if (action.gameObject.activeSelf != (pageAction != null))
-            {
-                action.gameObject.SetActive(pageAction != null);
-                scrollArea.offsetMin = new Vector2(17, pageAction != null ? 75 : 18);
-            }
-            if (actionLabel.text != label)
-                actionLabel.text = label;
+            action.gameObject.SetActive(pageAction != null);
+            scrollArea.offsetMin = new Vector2(17, pageAction != null ? 75 : 18);
+            actionLabel.text = label;
+        }
+
+        private void FitModalToKeyboard()
+        {
+            float keyboard = page == Page.Oracle && TouchScreenKeyboard.visible
+                ? Mathf.Max(0f, TouchScreenKeyboard.area.height - Screen.safeArea.yMin) / hudCanvas.scaleFactor
+                : 0f;
+            var target = new Vector2(14, 14 + keyboard);
+            if (modalPanel.offsetMin != target)
+                modalPanel.offsetMin = target;
+        }
+
+        private void ShowClueNotification(string clue)
+        {
+            clueToastUntil = Time.unscaledTime + 3.5f;
+        }
+
+        private void OnDestroy()
+        {
+            GameEvents.ClueUnlocked -= ShowClueNotification;
         }
 
         private void FitScreen()
@@ -447,6 +473,10 @@ namespace Odyssey
                 return;
 
             health.Render(VoyageState.Health, VoyageState.MaxHealth);
+            FitModalToKeyboard();
+            bool showClue = !fighting && clueToastUntil > Time.unscaledTime;
+            if (clueToast.gameObject.activeSelf != showClue)
+                clueToast.gameObject.SetActive(showClue);
             string status = "";
 #if !UNITY_EDITOR
             if (!fighting && cameraUnavailable)
@@ -454,6 +484,7 @@ namespace Odyssey
             else if (!fighting && ARSession.state != ARSessionState.SessionTracking)
                 status = "Point the camera at a well-lit area";
 #endif
+            if (showClue) status = "";
             if (status != trackingMessage)
             {
                 trackingMessage = status;
