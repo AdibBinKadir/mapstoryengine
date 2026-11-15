@@ -10,7 +10,6 @@ namespace Odyssey.Cyclops
     {
         [SerializeField] private Transform boss;
         [SerializeField] private Renderer eye;
-        [SerializeField] private float shieldHeight = 0.15f;
         [SerializeField] private float spawnDistance = 2.5f;
 
         private Camera viewCamera;
@@ -23,10 +22,13 @@ namespace Odyssey.Cyclops
         private bool useVoyageHealth;
         private bool paused;
         private bool placed;
-        private float initialHeight;
+        private float filteredShieldPitch;
+        private bool shieldRaised;
+        private Vector3? fullScale;
         private CyclopsMotion motion;
         private Animator idleAnimator;
         private AudioSource effects;
+        private AudioSource hurtVoice;
         private float recoil;
         private float fallProgress;
         private float feedbackAge;
@@ -56,11 +58,32 @@ namespace Odyssey.Cyclops
         private static readonly Color Mint = new Color32(139, 199, 178, 255);
         private static readonly Color Red = OdysseyTheme.Red;
 
+        internal void ShowPreview(Vector3 position, Camera camera, Vector3 up)
+        {
+            if (!fullScale.HasValue)
+            {
+                fullScale = boss.localScale;
+                boss.localScale = fullScale.Value * 0.32f;
+                boss.GetComponent<Collider>().enabled = false;
+            }
+
+            boss.position = position;
+            Vector3 facing = Vector3.ProjectOnPlane(camera.transform.position - position, up);
+            if (facing.sqrMagnitude > 0.01f)
+                boss.rotation = Quaternion.LookRotation(facing, up);
+            boss.gameObject.SetActive(true);
+        }
+
         internal void Begin(Camera camera, Transform arOrigin, bool simulate, Action<bool> finished,
             string resultExitLabel = "Back to Map", bool useVoyageHealth = false)
         {
             viewCamera = camera;
             bossCollider = boss.GetComponent<Collider>();
+            if (fullScale.HasValue)
+            {
+                boss.localScale = fullScale.Value;
+                bossCollider.enabled = true;
+            }
             trackingSpace = arOrigin;
             simulated = simulate;
             onExit = finished;
@@ -74,9 +97,14 @@ namespace Odyssey.Cyclops
             CreateEffects();
         }
 
-        private float Height()
+        internal static bool FilterShieldPitch(ref float filteredPitch, Vector3 forward, Vector3 up,
+            bool raised, float deltaTime)
         {
-            return trackingSpace.InverseTransformPoint(viewCamera.transform.position).y;
+            float vertical = Vector3.Dot(forward, up);
+            float pitch = Mathf.Asin(Mathf.Clamp(vertical, -1f, 1f)) * Mathf.Rad2Deg;
+            filteredPitch = Mathf.Lerp(filteredPitch, pitch, 1f - Mathf.Exp(-deltaTime / 0.045f));
+            float pitchThreshold = raised ? 10f : 18f;
+            return filteredPitch >= pitchThreshold;
         }
 
         private bool PlaceBoss()
@@ -86,7 +114,6 @@ namespace Odyssey.Cyclops
                 return false;
 
             forward.Normalize();
-            initialHeight = Height();
             boss.position = viewCamera.transform.position + forward * spawnDistance - trackingSpace.up * 1.3f;
             boss.rotation = Quaternion.LookRotation(-forward, trackingSpace.up);
             boss.gameObject.SetActive(true);
@@ -111,6 +138,7 @@ namespace Odyssey.Cyclops
 
             if (fight.Finished)
             {
+                shield.SetRaised(false, Time.unscaledDeltaTime);
                 if (tracking)
                 {
                     fallProgress = Mathf.Min(1, fallProgress + Time.deltaTime / 0.95f);
@@ -121,7 +149,9 @@ namespace Odyssey.Cyclops
 
             if (!tracking)
             {
-                shield.HideImmediately();
+                shieldRaised = false;
+                filteredShieldPitch = 0f;
+                shield.SetRaised(false, Time.unscaledDeltaTime);
                 instruction.text = placed ? "AR paused. Hold still while tracking returns." : "Point the rear camera at a well-lit area.";
                 shieldStatus.text = "Shield waiting";
                 SetEye(Color.black);
@@ -134,10 +164,15 @@ namespace Odyssey.Cyclops
                 return;
             }
 
-            bool raised = simulated ? Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)
-                : Height() - initialHeight >= shieldHeight;
+            if (simulated)
+                shieldRaised = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            else
+                shieldRaised = FilterShieldPitch(ref filteredShieldPitch,
+                    viewCamera.transform.forward, trackingSpace.up, shieldRaised,
+                    Time.unscaledDeltaTime);
+
             AdvanceFeedback(Time.deltaTime);
-            fight.Tick(Time.deltaTime, raised);
+            fight.Tick(Time.deltaTime, shieldRaised);
             PresentPhaseChange();
 
             if (fight.Current == CyclopsFight.Phase.Recovery && ReadTap(out Vector2 position))
@@ -149,26 +184,27 @@ namespace Odyssey.Cyclops
                     if (damage > 0)
                     {
                         recoil = 1;
+                        if (hurtVoice != null)
+                        {
+                            hurtVoice.Stop();
+                            hurtVoice.Play();
+                        }
                         bool powered = damage > 10;
                         if (fight.Current == CyclopsFight.Phase.Won)
                             ShowFeedback("FINISHING BLOW", Amber, victoryCue);
                         else
                             ShowFeedback(powered ? "POWER COUNTER  −" + damage : "HIT  −" + damage,
-                                powered ? Amber : Mint, counterCue);
+                                powered ? Amber : Mint, hurtVoice == null ? counterCue : null);
                     }
                 }
             }
 
-            UpdateHud(raised);
+            UpdateHud(shieldRaised);
+            shield.SetRaised(shieldRaised && !fight.Finished, Time.unscaledDeltaTime);
             if (fight.Finished)
             {
-                shield.HideImmediately();
                 resultButton.gameObject.SetActive(true);
                 resultButton.GetComponentInChildren<Text>().text = returnLabel;
-            }
-            else
-            {
-                shield.SetRaised(raised, Time.unscaledDeltaTime);
             }
         }
 
@@ -225,7 +261,7 @@ namespace Odyssey.Cyclops
             {
                 case CyclopsFight.Phase.Warning:
                     string attack = fight.CurrentAttack == CyclopsFight.Attack.Slam ? "Heavy slam" : "Quick swipe";
-                    instruction.text = attack + (raised ? "  •  Hold shield" : fight.PerfectWindow ? "  •  Raise now!" : "  •  Ready your shield");
+                    instruction.text = attack + (raised ? "  •  Hold shield" : fight.PerfectWindow ? "  •  Tilt up now!" : "  •  Ready your shield");
                     glow = fight.PerfectWindow ? new Color(5f, 2.1f, 0.45f)
                         : new Color(3f, 0.36f, 0.07f) * (0.65f + 0.35f * Mathf.Sin(fight.Progress * 18));
                     break;
@@ -266,7 +302,8 @@ namespace Odyssey.Cyclops
             feedbackAge = 0;
             feedback.gameObject.SetActive(true);
             AdvanceFeedback(0);
-            effects.PlayOneShot(sound, 0.65f);
+            if (sound != null)
+                effects.PlayOneShot(sound, 0.65f);
         }
 
         private void AdvanceFeedback(float seconds)
@@ -293,15 +330,22 @@ namespace Odyssey.Cyclops
 
         private void CreateEffects()
         {
-            effects = gameObject.AddComponent<AudioSource>();
-            effects.playOnAwake = false;
+            effects = OdysseyEncounterAudio.CreateSource(gameObject);
+            var hurtClip = Resources.Load<AudioClip>("Odyssey/CyclopsHurt");
+            if (hurtClip != null)
+            {
+                hurtVoice = OdysseyEncounterAudio.CreateSource(gameObject);
+                hurtVoice.clip = hurtClip;
+                hurtVoice.volume = 0.58f;
+            }
             if (warningCue == null)
             {
-                warningCue = MakeCue("Cyclops warning", 120, 240, 0.36f);
+                warningCue = OdysseyEncounterAudio.CyclopsWarning;
                 strikeCue = MakeCue("Cyclops impact", 120, 36, 0.28f);
-                guardCue = MakeCue("Cyclops guard", 520, 940, 0.22f);
+                guardCue = Resources.Load<AudioClip>("Odyssey/ShieldBlock")
+                    ?? MakeCue("Cyclops guard", 520, 940, 0.22f);
                 counterCue = MakeCue("Cyclops counter", 270, 150, 0.14f);
-                victoryCue = MakeCue("Cyclops victory", 280, 690, 0.44f);
+                victoryCue = OdysseyEncounterAudio.Victory;
             }
         }
 

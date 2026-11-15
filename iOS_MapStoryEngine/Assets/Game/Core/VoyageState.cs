@@ -9,6 +9,7 @@ namespace Odyssey
         private static readonly List<string> clues = new List<string>();
 
         internal static bool Started { get; private set; }
+        internal static bool Won { get; private set; }
         internal static int MaxHealth { get; private set; } = 100;
         internal static int Health { get; private set; } = 100;
         internal static IReadOnlyList<string> Clues => clues;
@@ -42,8 +43,18 @@ namespace Odyssey
         internal static void End()
         {
             Started = false;
+            Won = false;
             Health = MaxHealth = 100;
             clues.Clear();
+        }
+
+        internal static void Complete()
+        {
+            if (!Started || Won || Health == 0)
+                return;
+
+            Won = true;
+            GameEvents.RaiseGameWon();
         }
 
         private static void Damage(int amount)

@@ -14,7 +14,16 @@ namespace Odyssey
         private enum Page { None, Oracle, Clues, Rules, Locations }
 
         private static readonly string[] PageNames = { "", "Oracle", "Clues", "Rules", "Included Locations" };
-        private const string Rules = "Stop walking before looking at your phone. Find Cyclops and Medusa on the chart.\n\nRaise your phone to shield. Match the gold flash for a perfect block, then tap the exposed Cyclops.\n\nWhen Medusa appears, look away or close your eyes. Your journal keeps earned clues.";
+        private const string IncludedLocations = "SWSH\n\nUH\n\nSIER\n\nPKH";
+        private const string Rules =
+            "• You play as Odysseus. Like your mythical counterpart, you start from Troy, but your journey back to Ithaca is less than comfortable.\n\n" +
+            "• Troy is automatically set as your starting landmark. Which landmark represents Ithaca is a mystery.\n\n" +
+            "• Try your luck by visiting the landmarks listed in Included Locations. You might find Ithaca or stumble upon an eldritch horror.\n\n" +
+            "• Face one of the monsters at an included location to earn a clue. Your journal keeps the clues you earn.\n\n" +
+            "• If you die, return to the designated Troy landmark to restart the game.\n\n" +
+            "• The story ends when you reach Ithaca.\n\n" +
+            "• Ask the Oracle of Delphi if you have questions.\n\n" +
+            "Approach the Cyclops and tap Face Cyclops. Tilt your phone up to raise the shield. Match the gold flash for a perfect block, then tap the exposed Cyclops.";
 
         private RectTransform safeArea;
         private RectTransform landingSafeArea;
@@ -33,7 +42,7 @@ namespace Odyssey
         private ARSession session;
         private ARCameraManager cameraManager;
         private Camera rearCamera;
-        private VoyageRoute route;
+        private AudioSource backgroundMusic;
         private UnityAction practice;
         private UnityAction practiceMedusa;
         private Func<bool> caveDiscovered;
@@ -49,7 +58,11 @@ namespace Odyssey
         private float nextPageRefresh;
         private UnityAction pageAction;
 
-        internal static VoyageInterface Create(ARSession session, Camera camera, VoyageRoute route,
+        internal bool CanExplore => VoyageState.Started && !VoyageState.Won && !fighting
+            && !cameraUnavailable && session.enabled && rearCamera.enabled
+            && page == Page.None;
+
+        internal static VoyageInterface Create(ARSession session, Camera camera,
             UnityAction practice, UnityAction practiceMedusa, Func<bool> caveDiscovered,
             Func<bool> caveCleared, Func<bool> medusaCleared)
         {
@@ -58,13 +71,15 @@ namespace Odyssey
             ui.session = session;
             ui.rearCamera = camera;
             ui.cameraManager = camera.GetComponent<ARCameraManager>();
-            ui.route = route;
             ui.practice = practice;
             ui.practiceMedusa = practiceMedusa;
             ui.caveDiscovered = caveDiscovered;
             ui.caveCleared = caveCleared;
             ui.medusaCleared = medusaCleared;
             ui.Build(owner);
+            ui.backgroundMusic = OdysseyEncounterAudio.CreateLoop(owner, OdysseyEncounterAudio.VoyageBackground, 0f);
+            if (ui.backgroundMusic != null)
+                ui.backgroundMusic.Play();
             if (VoyageState.Started)
                 ui.Play();
             return ui;
@@ -194,8 +209,7 @@ namespace Odyssey
                     new Vector2(-12, -32), new Vector2(12, -8)), (OdysseyOrnament.Design)i, OdysseyTheme.Gold);
                 OdysseyTheme.Label(OdysseyTheme.Rect(slot, "Label", Vector2.zero, Vector2.right,
                     new Vector2(4, 3), new Vector2(-4, 36)),
-                    target == Page.Locations ? "Included\nLocations" : PageNames[i],
-                    target == Page.Locations ? 12 : 13, OdysseyTheme.Ivory);
+                    PageNames[i], 13, OdysseyTheme.Ivory);
             }
         }
 
@@ -346,7 +360,6 @@ namespace Odyssey
         {
             page = next;
             modal.interactable = next != Page.None;
-            route.SetOverlayOpen(next != Page.None);
             if (next == Page.None)
                 return;
             modal.blocksRaycasts = true;
@@ -365,9 +378,10 @@ namespace Odyssey
             switch (page)
             {
                 case Page.Oracle:
-                    if (VoyageState.Health == 0)
+                    if (VoyageState.Won || VoyageState.Health == 0)
                     {
-                        message = "Odysseus has fallen. Begin a new voyage to sail again.";
+                        message = VoyageState.Won ? "You reached Ithaca. Your voyage is complete."
+                            : "Odysseus has fallen. Begin a new voyage to sail again.";
                         label = "Begin a new voyage";
                         pageAction = () =>
                         {
@@ -376,27 +390,26 @@ namespace Odyssey
                         };
                     }
                     else if (caveCleared() && medusaCleared())
-                        message = "The guardian has fallen. Read your journal and choose where to explore next.";
+                        message = "Both guardians have fallen. Read the clues in your journal.";
+                    else if (caveCleared())
+                        message = "The Cyclops has fallen. Keep exploring through the rear camera.";
                     else if (caveDiscovered())
-                        message = "Cyclops and Medusa are marked on your chart. Approach either to enter.";
+                        message = "Approach the Cyclops and tap Face Cyclops.";
                     else
-                        message = "The way home begins with the places around you. Consult Included Locations and choose where to explore.";
+                        message = "Point the rear camera at your surroundings to begin exploring.";
                     break;
                 case Page.Clues:
                     message = VoyageState.Clues.Count == 0 ? "Your journal is empty. Clues you earn appear here."
                         : string.Join("\n\n", VoyageState.Clues);
                     break;
-                case Page.Rules:
-                    message = Rules;
-                    label = "Practice Cyclops";
-                    if (!cameraUnavailable)
-                        pageAction = () => { Open(Page.None); practice(); };
+                case Page.Locations:
+                    message = IncludedLocations;
                     break;
                 default:
-                    message = route.Locations(caveDiscovered(), caveCleared(), medusaCleared());
-                    label = route.ShowingChart ? "Return to AR" : "Open chart";
-                    if (route.CanToggle)
-                        pageAction = () => { Open(Page.None); route.Toggle(); };
+                    message = Rules;
+                    label = "Practice Cyclops";
+                    if (!cameraUnavailable && !VoyageState.Won)
+                        pageAction = () => { Open(Page.None); practice(); };
                     break;
             }
             if (content.text != message)
@@ -425,16 +438,20 @@ namespace Odyssey
         private void Update()
         {
             FitScreen();
+            if (backgroundMusic != null)
+            {
+                float musicTarget = VoyageState.Won ? 0f : fighting ? 0.04f : 0.16f;
+                backgroundMusic.volume = Mathf.MoveTowards(backgroundMusic.volume, musicTarget, Time.unscaledDeltaTime * 0.4f);
+            }
             if (!VoyageState.Started)
                 return;
 
-            route.Update();
             health.Render(VoyageState.Health, VoyageState.MaxHealth);
             string status = "";
 #if !UNITY_EDITOR
-            if (!fighting && !route.ShowingChart && cameraUnavailable)
+            if (!fighting && cameraUnavailable)
                 status = "AR camera unavailable on this device";
-            else if (!fighting && !route.ShowingChart && ARSession.state != ARSessionState.SessionTracking)
+            else if (!fighting && ARSession.state != ARSessionState.SessionTracking)
                 status = "Point the camera at a well-lit area";
 #endif
             if (status != trackingMessage)

@@ -582,7 +582,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   boss: {fileID: 6936674043907770169}
   eye: {fileID: 9141500296255401179}
-  shieldHeight: 0.15
   spawnDistance: 2.5
 --- !u!1 &1403581445003173602
 GameObject:
