@@ -1,4 +1,4 @@
-# Odyssey AR server (P3)
+# Odyssey AR server (P2)
 
 The laptop server the phone talks to. The API is specified in [`docs/CONTRACTS.md`](../docs/CONTRACTS.md) §A.
 
@@ -6,8 +6,8 @@ The laptop server the phone talks to. The API is specified in [`docs/CONTRACTS.m
 |---|---|---|
 | `GET /health` | everyone | `{ok, fake}` |
 | `POST /frame` | Medusa | JPEG from the hidden front camera → MediaPipe head pose → `looking_at_screen` |
-| `POST /sphinx` | Sphinx | intro / taunt line (+ riddle on intro), worded by Gemini |
-| `POST /sphinx/talk` | Sphinx | WAV → speech-to-text (Groq Whisper, OpenAI fallback) → Gemini reply + answer judging |
+| `POST /sphinx` | Sphinx | intro / taunt line (+ riddle on intro) by Gemini, voiced by ElevenLabs (`audio`: base64 WAV) |
+| `POST /sphinx/talk` | Sphinx | WAV → speech-to-text (ElevenLabs Scribe, then Groq / OpenAI Whisper) → answer judging + Gemini reply → ElevenLabs voice. Two correct answers → the "Not here." reveal |
 
 ## Setup (once)
 Use **Python 3.12**. MediaPipe has no wheels for 3.13+ yet.
@@ -19,7 +19,9 @@ cp server/.env.example server/.env       # then fill in the keys (server/.env is
 ```
 Keys:
 - `GEMINI_API_KEY`: get one at https://aistudio.google.com/apikey.
-- `GROQ_API_KEY` and/or `OPENAI_API_KEY`: speech-to-text. Groq is tried first.
+- `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID`: her voice and speech-to-text (https://elevenlabs.io).
+- `GEMINI_MODEL`: keep `gemini-flash-lite-latest`. The thinking Flash models take longer than the phone's 8 s wait.
+- Optional `GROQ_API_KEY` and/or `OPENAI_API_KEY`: speech-to-text fallbacks after ElevenLabs.
 
 The face model (~4 MB) downloads automatically to `server/models/` the first time `/frame` runs.
 
