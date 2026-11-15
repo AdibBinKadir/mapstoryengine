@@ -1,21 +1,23 @@
 # Contracts
 
-These are the only points where one person's code talks to another's. **Don't change them without telling the team** (see PLAN.md, Rule 1). P2 creates the C# stubs *inside Unity* so `.meta` files get generated, then commits them.
+These are the only points where one person's code talks to another's. **Don't change them without telling the team** (see PLAN.md, Rule 1). P1 (Farhan) creates the C# stubs *inside Unity* (in `iOS_MapStoryEngine`) so `.meta` files get generated, then commits them.
 
-## A. HTTP API (phone ↔ laptop server, owner: P3)
+## A. HTTP API (phone ↔ laptop server, owner: P2)
 Base URL is configurable in the app (Demo Mode panel and `GameConfig.serverUrl`), e.g. `http://192.168.43.10:8000`.
 Run with `uvicorn server.main:app --host 0.0.0.0 --port 8000`. Set `FAKE=1` to return canned data with no models or API keys.
 
 ### `GET /health`
 → `{ "ok": true, "fake": false }`
 
-### `POST /frame`  (Medusa only)
+### `POST /frame`  (Medusa only, and only if the Face ID path is a no-go; decided at CP1)
 Body: raw JPEG bytes (`Content-Type: image/jpeg`), about 320×240, ~5 per second, from the hidden front camera.
 ```json
-{ "face_found": true, "looking_at_screen": false, "yaw": 34.2, "pitch": -5.1, "ts": 1731600000.12 }
+{ "face_found": true, "eyes_closed": false, "looking_at_screen": false, "yaw": 34.2, "pitch": -5.1, "ts": 1731600000.12 }
 ```
-- `looking_at_screen`: a face is found AND |yaw| < 20° AND |pitch| < 20° (tunable), smoothed over ~3 frames.
+- `eyes_closed`: both eyes closed (tunable), smoothed over ~3 frames.
+- `looking_at_screen`: a face is found AND eyes are open AND |yaw| < 20° AND |pitch| < 20° (tunable), smoothed over ~3 frames. Eye direction may be added if it proves reliable.
 - The ~0.5 s "must keep looking" rule before STONED lives in **Unity** (Medusa), not the server.
+- *TBD (P2): mirror detection. If the server detects it, it adds a field here.*
 
 ### `POST /sphinx`  (intro and unprompted taunts, no audio)
 ```json
@@ -46,7 +48,10 @@ Body: raw JPEG bytes (`Content-Type: image/jpeg`), about 320×240, ~5 per second
 - `heard` is the speech-to-text transcript. Always show it on screen.
 - `answer_correct`: `true` or `false` if the player answered the current riddle, `null` if they were just talking.
 - `riddle_answer` comes from the **game**. The LLM only words the riddle, must never reveal the answer, and must never invent clues.
-- The LLM call times out after 8 s. Unity shows one built-in line if the request fails.
+- The LLM call times out after 8 s. Unity plays or shows one built-in line if the request fails.
+- The LLM is **Gemini**. Speech-to-text is **Groq-hosted Whisper**, with OpenAI Whisper as the fallback.
+- *TBD (P2): how the Sphinx's voice reaches the phone (server text-to-speech in the response, or text-to-speech on the phone).*
+- *TBD (P2): the form field for the typed debug-box fallback (PLAN §6), sent instead of `audio`.*
 
 ## B. C# (Unity 2019.4 means C# 7.3: no records, no `switch` expressions, no nullable reference types)
 All game code goes under `Assets/Game/`. The contract files are in `Assets/Game/Core/Contracts/`.
@@ -55,7 +60,9 @@ All game code goes under `Assets/Game/`. The contract files are in `Assets/Game/
 public enum EncounterType { Sphinx, Medusa, Cyclops, Hydra }
 public enum ClueTier { Vague, Good, Specific }
 
-// GameEvents.cs (owner: P2). Every encounter talks to the rest of the game only through these.
+// GameEvents.cs (owner: P1). Every encounter talks to the rest of the game only through these.
+// Clue rewards: Sphinx -> RequestClue(Good); Medusa (mirror) -> RequestClue(Good); Cyclops -> RequestClue(Specific);
+// Hydra -> none. ClueBook shows every ClueUnlocked as on-screen text and adds it to the journal.
 using System;
 public static class GameEvents
 {
@@ -82,16 +89,18 @@ public static class GameEvents
 // Rule: only GameState changes HP and only GameState raises PlayerDied, except Medusa, which kills
 // instantly with a "stoned" cause through GameState.Kill("stoned").
 
-// IFaceSignals.cs (owner: P1; real = CvClient, mock = KeyboardFaceSignals with L = toggle looking, F = toggle face)
+// IFaceSignals.cs (owner: P2; real = Face ID tracking or CvClient, mock = KeyboardFaceSignals with
+// L = toggle looking, F = toggle face, E = toggle eyes closed)
 public interface IFaceSignals
 {
     bool FaceFound { get; }
-    bool LookingAtScreen { get; }
+    bool EyesClosed { get; }
+    bool LookingAtScreen { get; }   // false whenever EyesClosed
     void StartStreaming();
     void StopStreaming();
 }
 
-// ICameraModeSwitcher.cs (owner: P1). Used ONLY by Medusa.
+// ICameraModeSwitcher.cs (owner: P2). Used ONLY by Medusa. With the Face ID path, FrontCameraTexture may be null.
 using UnityEngine;
 public interface ICameraModeSwitcher
 {
@@ -108,7 +117,7 @@ public interface IEncounter
     void Abort();   // the player died or walked away
 }
 
-// Services.cs (owner: P2): the simplest possible service locator, filled in at startup.
+// Services.cs (owner: P1): the simplest possible service locator, filled in at startup.
 public static class Services
 {
     public static IFaceSignals Face;
@@ -117,17 +126,17 @@ public static class Services
 }
 ```
 
-## C. Config and content (owner: P2; values filled in by the team)
+## C. Config and content (owner: P1; values filled in by the team)
 `GameConfig` is a ScriptableObject at `Assets/Game/Core/GameConfig.asset`:
 - `serverUrl`
-- `troy`, `ithaca`, `sphinx`, `cyclops`: lat/lon each
+- `troy`, `ithaca`, `sphinx`, `medusa`, `cyclops`: lat/lon each (Medusa's lair; leaving its `encounterRadiusM` ends her encounter)
 - `hydraZones[]`: lat/lon list
 - `respawnPoints[]`: lat/lon list (Troy is always included)
 - `maxHp = 100`, `winRadiusM = 20`, `respawnRadiusM = 20`, `hydraRadiusM = 30`, `encounterRadiusM = 25`
 - `vagueClueIntervalSec = 300` (Demo Mode: 30), `demoMode = true`
 - Prefab references for each encounter
 
-`Assets/Game/Core/Clues.json` (content written by P3 and the team):
+`Assets/Game/Core/Clues.json` (content written by P4 and the team):
 ```json
 { "vague": ["..."], "good": ["..."], "specific": ["..."],
   "riddles": [ { "answer": "Central Library", "hint": "..." } ] }

@@ -1,5 +1,7 @@
 # ARdyssey project notes
 
+> The team now builds for **iPhone** (`iOS_MapStoryEngine`); see `changes.md`. This file covers the **Android backup project** only.
+
 ## Android project
 
 - Open `Android_MapStoryEngine` in Unity **2019.4.41f2**. The project includes **MCP for Unity 2019 v0.3.1**. Its local Streamable HTTP endpoint defaults to `http://127.0.0.1:6500/mcp`.
