@@ -13161,7 +13161,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   noLocationsToVisit: 4
   searchRadius: 250
-  API_KEY: 
   _map: {fileID: 667237211}
   ARPlayerMapMarker: {fileID: 1577657024}
   StoryManager_15: {fileID: 416570859}

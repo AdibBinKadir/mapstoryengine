@@ -114,7 +114,7 @@ namespace UnityARInterface
 #if UNITY_EDITOR
                 m_Interface = new AREditorInterface();
 #elif UNITY_IOS
-                m_Interface = new ARKitInterface();
+                throw new System.NotSupportedException("The legacy Mapbox AR interface has no iOS backend. Use AR Foundation for iOS.");
 #elif UNITY_ANDROID
                 m_Interface = new ARCoreInterface();
 #endif

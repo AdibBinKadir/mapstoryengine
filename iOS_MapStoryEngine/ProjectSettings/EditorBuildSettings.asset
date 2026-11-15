@@ -4,5 +4,10 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
-  m_configObjects: {}
+  m_Scenes:
+  - enabled: 1
+    path: Assets/StoryEngine/Scenes/MapStory.unity
+    guid: 8bac9648ace2f45b398381f5d0fe217b
+  m_configObjects:
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: d8788f1cc65842debb76267eb9156ac1,
+      type: 2}

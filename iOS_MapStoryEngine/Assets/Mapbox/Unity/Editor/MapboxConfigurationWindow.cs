@@ -132,7 +132,7 @@ namespace Mapbox.Editor
 			{
 				_mapboxConfig = new MapboxConfiguration
 				{
-					AccessToken = _accessToken,
+					AccessToken = string.Empty,
 					MemoryCacheSize = (uint)_memoryCacheSize,
 					FileCacheSize = (uint)_fileCacheSize,
 					AutoRefreshCache = _autoRefreshCache,
@@ -268,7 +268,10 @@ namespace Mapbox.Editor
 
 			//save the config
 			_configurationFile = Path.Combine(Unity.Constants.Path.MAPBOX_RESOURCES_ABSOLUTE, Unity.Constants.Path.CONFIG_FILE);
-			var json = JsonUtility.ToJson(_mapboxAccess.Configuration);
+			var savedConfig = JsonUtility.FromJson<MapboxConfiguration>(JsonUtility.ToJson(_mapboxAccess.Configuration));
+			if (savedConfig == null) return;
+			savedConfig.AccessToken = string.Empty;
+			var json = JsonUtility.ToJson(savedConfig);
 			File.WriteAllText(_configurationFile, json);
 		}
 
