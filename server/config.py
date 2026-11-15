@@ -50,7 +50,7 @@ def load():
     return Settings(
         fake=_flag("FAKE"),
         gemini_api_key=_str("GEMINI_API_KEY"),
-        gemini_model=_str("GEMINI_MODEL", "gemini-flash-latest") or "gemini-flash-latest",
+        gemini_model=_str("GEMINI_MODEL", "gemini-flash-lite-latest") or "gemini-flash-lite-latest",
         gemini_thinking_budget=_str("GEMINI_THINKING_BUDGET"),
         groq_api_key=_str("GROQ_API_KEY"),
         groq_stt_model=_str("GROQ_STT_MODEL", "whisper-large-v3-turbo") or "whisper-large-v3-turbo",

@@ -20,6 +20,10 @@ from . import config
 log = logging.getLogger("sphinx")
 
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
+# Measured: answers in ~1 s; the "thinking" Flash models timed out past the phone's 8 s wait.
+DEFAULT_MODEL = "gemini-flash-lite-latest"
+# Seconds of the request budget kept for ElevenLabs to voice the reply after the LLM.
+VOICE_RESERVE_S = 1.5
 
 # answer_similarity() at or above this counts as the player saying the answer, whatever the LLM thinks.
 SAYS_ANSWER = 0.82
@@ -213,7 +217,7 @@ def call_gemini(prompt, timeout):
 
 
 def _llm(prompt, deadline):
-    timeout = min(config.settings.llm_timeout_s, deadline - time.monotonic() - 0.2)
+    timeout = min(config.settings.llm_timeout_s, deadline - time.monotonic() - VOICE_RESERVE_S)
     if timeout < 1.0:
         raise LlmError("out of time before the LLM call")
     return call_gemini(prompt, timeout)

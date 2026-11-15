@@ -206,3 +206,14 @@ def test_fake_talk_cycle_reaches_reveal():
 def test_fake_typed_text_is_judged_for_real():
     assert sphinx.fake_talk(STATE, "a man")["verdict"] == "correct"
     assert sphinx.fake_talk(STATE, "a horse")["verdict"] == "wrong"
+
+
+def test_llm_leaves_time_for_her_voice(real_mode, monkeypatch):
+    seen = []
+    monkeypatch.setattr(sphinx, "call_gemini", lambda prompt, timeout: seen.append(timeout) or verdict_reply(False))
+    sphinx.talk("the moon", STATE, time.monotonic() + 4.0)
+    assert seen and seen[0] <= 4.0 - sphinx.VOICE_RESERVE_S
+
+
+def test_default_model_is_the_fast_one():
+    assert sphinx.DEFAULT_MODEL == "gemini-flash-lite-latest"
