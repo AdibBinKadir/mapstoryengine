@@ -23,16 +23,36 @@ namespace Odyssey.Cyclops
         private bool paused;
         private bool placed;
         private float initialHeight;
-        private Quaternion standing;
+        private CyclopsMotion motion;
+        private Animator idleAnimator;
+        private AudioSource effects;
+        private float recoil;
+        private float fallProgress;
+        private float feedbackAge;
+        private Color feedbackColor;
         private MaterialPropertyBlock eyeProperties;
         private RectTransform safePanel;
-        private Text health;
+        private Text playerHealth;
+        private Text cyclopsHealth;
         private Text instruction;
         private Text shieldStatus;
         private Image playerBar;
         private Image bossBar;
-        private Button exit;
+        private Button resultButton;
+        private CyclopsShieldGraphic shield;
+        private Text feedback;
+        private Image flash;
+        private Image timingBar;
         private CyclopsFight.Phase? previousPhase;
+
+        private static AudioClip warningCue;
+        private static AudioClip strikeCue;
+        private static AudioClip guardCue;
+        private static AudioClip counterCue;
+        private static AudioClip victoryCue;
+        private static readonly Color Amber = new Color(1f, 0.72f, 0.28f);
+        private static readonly Color Mint = new Color(0.44f, 0.95f, 0.72f);
+        private static readonly Color Red = new Color(1f, 0.37f, 0.31f);
 
         internal void Begin(Camera camera, Transform arOrigin, bool simulate, Action<bool> finished,
             string resultExitLabel = "Back to Map")
@@ -45,8 +65,10 @@ namespace Odyssey.Cyclops
             returnLabel = resultExitLabel;
             fight = new CyclopsFight();
             eyeProperties = new MaterialPropertyBlock();
+            idleAnimator = boss.GetComponentInChildren<Animator>(true);
             boss.gameObject.SetActive(false);
             CreateHud();
+            CreateEffects();
         }
 
         private float Height()
@@ -63,9 +85,9 @@ namespace Odyssey.Cyclops
             forward.Normalize();
             initialHeight = Height();
             boss.position = viewCamera.transform.position + forward * spawnDistance - trackingSpace.up * 1.3f;
-            standing = Quaternion.LookRotation(-forward, trackingSpace.up);
-            boss.rotation = standing;
+            boss.rotation = Quaternion.LookRotation(-forward, trackingSpace.up);
             boss.gameObject.SetActive(true);
+            motion = new CyclopsMotion(boss);
             placed = true;
             return true;
         }
@@ -75,21 +97,29 @@ namespace Odyssey.Cyclops
             if (fight == null)
                 return;
 
+            motion?.RestoreIdle();
             CyclopsView.FitSafeArea(safePanel);
+            bool tracking = !paused && Application.isFocused
+                && (simulated || ARSession.state == ARSessionState.SessionTracking);
+            if (idleAnimator != null)
+                idleAnimator.speed = tracking && !fight.Finished ? 1 : 0;
+
             if (fight.Finished)
             {
-                if (fight.Current == CyclopsFight.Phase.Won)
+                if (tracking)
                 {
-                    Quaternion fallen = standing * Quaternion.Euler(-86, 0, 0);
-                    boss.rotation = Quaternion.RotateTowards(boss.rotation, fallen, Time.deltaTime * 140);
+                    fallProgress = Mathf.Min(1, fallProgress + Time.deltaTime / 0.95f);
+                    AdvanceFeedback(Time.deltaTime);
                 }
                 return;
             }
 
-            if (paused || !Application.isFocused || (!simulated && ARSession.state != ARSessionState.SessionTracking))
+            if (!tracking)
             {
+                shield.HideImmediately();
                 instruction.text = placed ? "AR paused. Hold still while tracking returns." : "Point the rear camera at a well-lit area.";
                 shieldStatus.text = "Shield waiting";
+                SetEye(Color.black);
                 return;
             }
 
@@ -101,32 +131,105 @@ namespace Odyssey.Cyclops
 
             bool raised = simulated ? Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)
                 : Height() - initialHeight >= shieldHeight;
+            AdvanceFeedback(Time.deltaTime);
             fight.Tick(Time.deltaTime, raised);
+            PresentPhaseChange();
+
             if (fight.Current == CyclopsFight.Phase.Recovery && ReadTap(out Vector2 position))
             {
                 Ray ray = viewCamera.ScreenPointToRay(position);
                 if (bossCollider.Raycast(ray, out _, 12f))
-                    fight.TryHit();
+                {
+                    int damage = fight.TryHit();
+                    if (damage > 0)
+                    {
+                        recoil = 1;
+                        bool powered = damage > 10;
+                        if (fight.Current == CyclopsFight.Phase.Won)
+                            ShowFeedback("FINISHING BLOW", Amber, victoryCue);
+                        else
+                            ShowFeedback(powered ? "POWER COUNTER  −" + damage : "HIT  −" + damage,
+                                powered ? Amber : Mint, counterCue);
+                    }
+                }
             }
 
             UpdateHud(raised);
+            if (fight.Finished)
+            {
+                shield.HideImmediately();
+                resultButton.gameObject.SetActive(true);
+            }
+            else
+            {
+                shield.SetRaised(raised, Time.unscaledDeltaTime);
+            }
+        }
+
+        private void LateUpdate()
+        {
+            motion?.Render(fight, recoil, fallProgress);
+        }
+
+        private void PresentPhaseChange()
+        {
+            if (previousPhase == fight.Current)
+                return;
+
+            previousPhase = fight.Current;
+            if (fight.Current == CyclopsFight.Phase.Warning)
+            {
+                effects.PlayOneShot(warningCue, 0.50f);
+                return;
+            }
+
+            if (fight.Current != CyclopsFight.Phase.Recovery && fight.Current != CyclopsFight.Phase.Lost)
+                return;
+
+            switch (fight.LastImpact)
+            {
+                case CyclopsFight.Impact.PerfectBlock:
+                    ShowFeedback("PERFECT BLOCK", Amber, guardCue);
+                    recoil = 0.65f;
+                    break;
+                case CyclopsFight.Impact.Block:
+                    ShowFeedback("BLOCKED", Mint, guardCue);
+                    recoil = 0.35f;
+                    break;
+                case CyclopsFight.Impact.Hit:
+                    ShowFeedback("−25 HP", Red, strikeCue);
+                    break;
+            }
         }
 
         private void UpdateHud(bool raised)
         {
-            health.text = "YOU  " + fight.PlayerHp + "     CYCLOPS  " + fight.BossHp;
+            playerHealth.text = "ODYSSEUS  " + fight.PlayerHp;
+            cyclopsHealth.text = "CYCLOPS  " + fight.BossHp;
             CyclopsView.SetBar(playerBar, (float)fight.PlayerHp / CyclopsFight.PlayerMax);
             CyclopsView.SetBar(bossBar, (float)fight.BossHp / CyclopsFight.BossMax);
             shieldStatus.text = fight.Finished ? "" : raised ? "Shield up" : "Shield down";
-            shieldStatus.color = raised ? new Color(0.44f, 0.95f, 0.72f) : Color.white;
+            shieldStatus.color = raised ? Mint : Color.white;
 
+            bool warning = fight.Current == CyclopsFight.Phase.Warning;
+            bool recovery = fight.Current == CyclopsFight.Phase.Recovery;
+            timingBar.color = warning ? Amber : Mint;
+            CyclopsView.SetBar(timingBar, warning || recovery ? 1 - fight.Progress : 0);
+
+            Color glow = Color.black;
             switch (fight.Current)
             {
                 case CyclopsFight.Phase.Warning:
-                    instruction.text = "Raise your phone to block!";
+                    string attack = fight.CurrentAttack == CyclopsFight.Attack.Slam ? "Heavy slam" : "Quick swipe";
+                    instruction.text = attack + (raised ? "  •  Hold shield" : fight.PerfectWindow ? "  •  Raise now!" : "  •  Ready your shield");
+                    glow = fight.PerfectWindow ? new Color(5f, 2.1f, 0.45f)
+                        : new Color(3f, 0.36f, 0.07f) * (0.65f + 0.35f * Mathf.Sin(fight.Progress * 18));
                     break;
                 case CyclopsFight.Phase.Recovery:
-                    instruction.text = fight.LastHitBlocked ? "Blocked! Tap the Cyclops." : "You took a hit. Tap the Cyclops.";
+                    instruction.text = fight.CountersLeft == 0
+                        ? "The Cyclops is recovering"
+                        : "Exposed! Tap to counter  •  " + fight.CountersLeft + " left";
+                    glow = new Color(0.07f, 0.55f, 0.36f);
                     break;
                 case CyclopsFight.Phase.Won:
                     instruction.text = "Cyclops defeated";
@@ -135,24 +238,85 @@ namespace Odyssey.Cyclops
                     instruction.text = "The Cyclops defeated you";
                     break;
                 default:
-                    instruction.text = "Watch the Cyclops’s eye.";
+                    instruction.text = "Time your shield for the gold flash.";
                     break;
             }
 
-            if (previousPhase == fight.Current)
+            SetEye(glow);
+        }
+
+        private void SetEye(Color glow)
+        {
+            if (eye == null)
                 return;
 
-            if (eye != null)
-            {
-                eye.GetPropertyBlock(eyeProperties);
-                eyeProperties.SetColor("_EmissionColor", fight.Current == CyclopsFight.Phase.Warning
-                    ? new Color(3f, 0.36f, 0.07f) : Color.black);
-                eye.SetPropertyBlock(eyeProperties);
-            }
-            if (fight.Finished)
-                exit.GetComponentInChildren<Text>().text = returnLabel;
+            eye.GetPropertyBlock(eyeProperties);
+            eyeProperties.SetColor("_EmissionColor", glow);
+            eye.SetPropertyBlock(eyeProperties);
+        }
 
-            previousPhase = fight.Current;
+        private void ShowFeedback(string message, Color color, AudioClip sound)
+        {
+            feedback.text = message;
+            feedbackColor = color;
+            feedbackAge = 0;
+            feedback.gameObject.SetActive(true);
+            AdvanceFeedback(0);
+            effects.PlayOneShot(sound, 0.65f);
+        }
+
+        private void AdvanceFeedback(float seconds)
+        {
+            recoil = Mathf.Max(0, recoil - seconds * 4);
+            if (!feedback.gameObject.activeSelf)
+                return;
+
+            feedbackAge += seconds;
+            if (feedbackAge >= 0.68f)
+            {
+                feedback.gameObject.SetActive(false);
+                flash.color = Color.clear;
+                return;
+            }
+
+            float opacity = 1 - Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.23f, 0.68f, feedbackAge));
+            feedback.color = new Color(feedbackColor.r, feedbackColor.g, feedbackColor.b, opacity);
+            feedback.rectTransform.anchoredPosition = new Vector2(0, Mathf.Min(feedbackAge * 36, 20));
+            feedback.rectTransform.localScale = Vector3.one * (1 + Mathf.Max(0, 1 - feedbackAge * 7) * 0.16f);
+            flash.color = new Color(feedbackColor.r, feedbackColor.g, feedbackColor.b,
+                Mathf.Max(0, 0.18f * (1 - feedbackAge * 6)));
+        }
+
+        private void CreateEffects()
+        {
+            effects = gameObject.AddComponent<AudioSource>();
+            effects.playOnAwake = false;
+            if (warningCue == null)
+            {
+                warningCue = MakeCue("Cyclops warning", 120, 240, 0.36f);
+                strikeCue = MakeCue("Cyclops impact", 120, 36, 0.28f);
+                guardCue = MakeCue("Cyclops guard", 520, 940, 0.22f);
+                counterCue = MakeCue("Cyclops counter", 270, 150, 0.14f);
+                victoryCue = MakeCue("Cyclops victory", 280, 690, 0.44f);
+            }
+        }
+
+        private static AudioClip MakeCue(string name, float startHz, float endHz, float seconds)
+        {
+            const int sampleRate = 22050;
+            var samples = new float[Mathf.RoundToInt(seconds * sampleRate)];
+            float phase = 0;
+            for (int i = 0; i < samples.Length; i++)
+            {
+                float t = (float)i / (samples.Length - 1);
+                float envelope = Mathf.Min(1, t * 30) * (1 - t) * (1 - t);
+                phase += 2 * Mathf.PI * Mathf.Lerp(startHz, endHz, t) / sampleRate;
+                samples[i] = (Mathf.Sin(phase) + 0.23f * Mathf.Sin(phase * 2)) * envelope * 0.5f;
+            }
+
+            AudioClip clip = AudioClip.Create(name, samples.Length, 1, sampleRate, false);
+            clip.SetData(samples, 0);
+            return clip;
         }
 
         private static bool ReadTap(out Vector2 position)
@@ -187,32 +351,96 @@ namespace Odyssey.Cyclops
             CyclopsView.Overlay(hud);
             Vector2 top = new Vector2(0.5f, 1);
             Vector2 bottom = new Vector2(0.5f, 0);
+            Vector2 center = new Vector2(0.5f, 0.5f);
+            RectTransform flashRect = CyclopsView.Place(hud.transform, "Impact tint", Vector2.zero,
+                Vector2.zero, Vector2.zero, Vector2.zero);
+            flashRect.anchorMax = Vector2.one;
+            Vector2 shieldPivot = new Vector2(0.5f, 1f);
+            var shieldRect = CyclopsView.Place(hud.transform, "Raised aspis", bottom, shieldPivot,
+                Vector2.zero, Vector2.zero);
+            shield = shieldRect.gameObject.AddComponent<CyclopsShieldGraphic>();
+            shield.Initialize((RectTransform)hud.transform);
+
+            // Keep the impact flash above the shield and the readable HUD above both.
+            flashRect.SetAsLastSibling();
+            flash = CyclopsView.Background(flashRect, Color.clear);
             safePanel = CyclopsView.Place(hud.transform, "Safe area", top, top, Vector2.zero, Vector2.zero);
+            CyclopsView.FitSafeArea(safePanel);
 
-            var header = CyclopsView.Place(safePanel, "Health", top, top, new Vector2(0, -12), new Vector2(344, 65));
-            CyclopsView.Background(header, new Color(0.07f, 0.08f, 0.11f, 0.93f));
-            health = CyclopsView.Label(CyclopsView.Place(header, "Hit points", top, top,
-                new Vector2(0, -5), new Vector2(344, 25)), "YOU  100     CYCLOPS  60");
-            playerBar = CyclopsView.Bar(CyclopsView.Place(header, "Player", top, top,
-                new Vector2(-77, -36), new Vector2(135, 9)), new Color(0.37f, 0.83f, 0.62f));
-            bossBar = CyclopsView.Bar(CyclopsView.Place(header, "Boss", top, top,
-                new Vector2(77, -36), new Vector2(135, 9)), new Color(0.99f, 0.32f, 0.24f));
+            var header = CyclopsView.Place(safePanel, "Combat HUD", top, top, new Vector2(0, -10), new Vector2(0, 116));
+            header.anchorMin = new Vector2(0.04f, 1);
+            header.anchorMax = new Vector2(0.96f, 1);
+            CyclopsView.Background(header, new Color(0.065f, 0.08f, 0.10f, 0.96f));
+            var trim = CyclopsView.Place(header, "Bronze edge", top, top, Vector2.zero, new Vector2(0, 2));
+            trim.anchorMin = new Vector2(0, 1);
+            trim.anchorMax = new Vector2(1, 1);
+            CyclopsView.Background(trim, new Color(0.69f, 0.46f, 0.21f));
 
-            var footer = CyclopsView.Place(safePanel, "Fight controls", bottom, bottom,
-                new Vector2(0, 14), new Vector2(344, 135));
-            CyclopsView.Background(footer, new Color(0.07f, 0.08f, 0.11f, 0.93f));
-            instruction = CyclopsView.Label(CyclopsView.Place(footer, "Instruction", top, top,
-                new Vector2(0, -9), new Vector2(322, 39)), "Find a clear space to fight.", 17);
-            shieldStatus = CyclopsView.Label(CyclopsView.Place(footer, "Shield", top, top,
-                new Vector2(0, -48), new Vector2(322, 22)), "Shield waiting");
-            exit = CyclopsView.Button(CyclopsView.Place(footer, "Exit", bottom, bottom,
-                new Vector2(0, 12), new Vector2(158, 44)), "Leave Cave",
-                () => onExit?.Invoke(fight.Current == CyclopsFight.Phase.Won));
+            playerBar = HealthDisplay(header, "Odysseus", "ODYSSEUS  100", 0.05f, 0.47f,
+                new Color(0.88f, 0.65f, 0.32f), out playerHealth);
+            bossBar = HealthDisplay(header, "Cyclops", "CYCLOPS  60", 0.53f, 0.95f,
+                new Color(0.89f, 0.31f, 0.23f), out cyclopsHealth);
+
+            instruction = CyclopsView.Label(StretchRow(header, "Instruction", -48, 24),
+                "Find a clear space to fight.", 16);
+            instruction.resizeTextForBestFit = true;
+            instruction.resizeTextMinSize = 12;
+            instruction.resizeTextMaxSize = 16;
+            shieldStatus = CyclopsView.Label(StretchRow(header, "Shield", -74, 19), "Shield waiting", 13);
+            shieldStatus.fontStyle = FontStyle.Bold;
+            timingBar = CyclopsView.Bar(StretchRow(header, "Timing", -101, 4), Amber);
+            CyclopsView.SetBar(timingBar, 0);
+
+            Vector2 feedbackAnchor = new Vector2(0.5f, 0.64f);
+            feedback = CyclopsView.Label(CyclopsView.Place(safePanel, "Fight feedback", feedbackAnchor, center,
+                Vector2.zero, new Vector2(310, 52)), "", 25);
+            feedback.fontStyle = FontStyle.Bold;
+            var shadow = feedback.gameObject.AddComponent<UnityEngine.UI.Outline>();
+            shadow.effectColor = new Color(0.05f, 0.06f, 0.08f, 0.9f);
+            shadow.effectDistance = new Vector2(1.7f, -1.7f);
+            feedback.gameObject.SetActive(false);
+
+            resultButton = CyclopsView.Button(CyclopsView.Place(safePanel, "Continue after fight", bottom, bottom,
+                new Vector2(0, 20), new Vector2(170, 48)), returnLabel, ContinueAfterFight);
+            resultButton.gameObject.SetActive(false);
+        }
+
+        private static Image HealthDisplay(RectTransform header, string name, string text,
+            float left, float right, Color color, out Text label)
+        {
+            Vector2 top = new Vector2(0.5f, 1);
+            var column = CyclopsView.Place(header, name, top, top, new Vector2(0, -9), new Vector2(0, 37));
+            column.anchorMin = new Vector2(left, 1);
+            column.anchorMax = new Vector2(right, 1);
+            label = CyclopsView.Label(StretchRow(column, "Hit points", 0, 20), text, 14);
+            label.fontStyle = FontStyle.Bold;
+            label.color = new Color(0.94f, 0.88f, 0.76f);
+            return CyclopsView.Bar(StretchRow(column, "Health bar", -24, 5), color);
+        }
+
+        private static RectTransform StretchRow(RectTransform parent, string name, float y, float height)
+        {
+            Vector2 top = new Vector2(0.5f, 1);
+            var row = CyclopsView.Place(parent, name, top, top, new Vector2(0, y), new Vector2(-16, height));
+            row.anchorMin = new Vector2(0, 1);
+            row.anchorMax = new Vector2(1, 1);
+            return row;
+        }
+
+        private void ContinueAfterFight()
+        {
+            if (fight == null || !fight.Finished)
+                return;
+
+            resultButton.interactable = false;
+            onExit?.Invoke(fight.Current == CyclopsFight.Phase.Won);
         }
 
         private void OnApplicationPause(bool isPaused)
         {
             paused = isPaused;
+            if (isPaused && shield != null)
+                shield.HideImmediately();
         }
     }
 }

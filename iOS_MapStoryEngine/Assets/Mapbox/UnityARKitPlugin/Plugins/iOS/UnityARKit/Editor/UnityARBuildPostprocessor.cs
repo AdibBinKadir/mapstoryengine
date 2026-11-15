@@ -77,8 +77,12 @@ public class UnityARBuildPostprocessor
 
 		UnityEditor.iOS.Xcode.PBXProject proj = new UnityEditor.iOS.Xcode.PBXProject();
 		proj.ReadFromString(File.ReadAllText(projPath));
-		proj.AddFrameworkToProject(proj.TargetGuidByName("Unity-iPhone"), "ARKit.framework", false);
-		string target = proj.TargetGuidByName("Unity-iPhone");
+		string target = proj.GetUnityFrameworkTargetGuid();
+		proj.AddFrameworkToProject(target, "ARKit.framework", false);
+		proj.AddBuildProperty(target, "HEADER_SEARCH_PATHS",
+			"$(SRCROOT)/Libraries/Mapbox/Core/Plugins/iOS/MapboxMobileEvents/include");
+		proj.UpdateBuildProperty(proj.GetUnityMainTargetGuid(), "OTHER_CFLAGS",
+			new string[0], new[] { "-mno-thumb" });
 		Directory.CreateDirectory(Path.Combine(pathToBuiltProject, "Libraries/Unity"));
 
 		// Check UnityARKitPluginSettings
