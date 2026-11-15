@@ -17,6 +17,7 @@ namespace Odyssey.Cyclops
         private Collider bossCollider;
         private Transform trackingSpace;
         private Action<bool> onExit;
+        private string returnLabel;
         private CyclopsFight fight;
         private bool simulated;
         private bool paused;
@@ -33,13 +34,15 @@ namespace Odyssey.Cyclops
         private Button exit;
         private CyclopsFight.Phase? previousPhase;
 
-        internal void Begin(Camera camera, Transform arOrigin, bool simulate, Action<bool> finished)
+        internal void Begin(Camera camera, Transform arOrigin, bool simulate, Action<bool> finished,
+            string resultExitLabel = "Back to Map")
         {
             viewCamera = camera;
             bossCollider = boss.GetComponent<Collider>();
             trackingSpace = arOrigin;
             simulated = simulate;
             onExit = finished;
+            returnLabel = resultExitLabel;
             fight = new CyclopsFight();
             eyeProperties = new MaterialPropertyBlock();
             boss.gameObject.SetActive(false);
@@ -147,7 +150,7 @@ namespace Odyssey.Cyclops
                 eye.SetPropertyBlock(eyeProperties);
             }
             if (fight.Finished)
-                exit.GetComponentInChildren<Text>().text = "Back to Map";
+                exit.GetComponentInChildren<Text>().text = returnLabel;
 
             previousPhase = fight.Current;
         }

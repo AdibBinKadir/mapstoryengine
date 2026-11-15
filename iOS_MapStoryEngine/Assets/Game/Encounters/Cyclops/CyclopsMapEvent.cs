@@ -43,6 +43,13 @@ namespace Odyssey.Cyclops
         private Text distanceLabel;
         private RectTransform marker;
         private Button enter;
+        private Title title;
+        private Button continueJourney;
+        private Button testButton;
+        private bool journeyStarting;
+        private bool testFight;
+        private bool savedMapCamera;
+        private bool savedStory;
         private bool savedMapTouch;
         private bool savedArSession;
         private bool savedArCamera;
@@ -81,6 +88,7 @@ namespace Odyssey.Cyclops
             foreach (GameObject root in scene.GetRootGameObjects())
             {
                 if (map == null) map = root.GetComponentInChildren<AbstractMap>(true);
+                if (title == null) title = root.GetComponentInChildren<Title>(true);
                 if (mapTouch == null) mapTouch = root.GetComponentInChildren<TouchCamera>(true);
                 if (arOrigin == null) arOrigin = root.GetComponentInChildren<ARSessionOrigin>(true);
                 if (arSession == null) arSession = root.GetComponentInChildren<ARSession>(true);
@@ -106,12 +114,20 @@ namespace Odyssey.Cyclops
 
             storyRaycaster = storyCanvas.GetComponent<GraphicRaycaster>();
             CreateMapHud();
+            ConfigureTitleMenu();
+            HideLegacyButton(mapTools.transform.Find("ManualTrigger_Button_5_3"));
         }
 
         private void Update()
         {
             if (overlay == null)
                 return;
+
+            if (journeyStarting && continueJourney.isActiveAndEnabled)
+            {
+                journeyStarting = false;
+                continueJourney.onClick.Invoke();
+            }
 
             if (locationProvider == null)
             {
@@ -205,9 +221,18 @@ namespace Odyssey.Cyclops
 
         private void EnterCave()
         {
-            if (!MapIsVisible() || !gate.CanEnter(Now) || cleared)
-                return;
+            if (MapIsVisible() && gate.CanEnter(Now) && !cleared)
+                OpenFight(false);
+        }
 
+        private void TestCyclops()
+        {
+            if (title.isActiveAndEnabled && !journeyStarting && activeFight == null)
+                OpenFight(true);
+        }
+
+        private void OpenFight(bool testing)
+        {
             var prefab = Resources.Load<CyclopsEncounter>("Odyssey/CyclopsEncounter");
             if (prefab == null)
             {
@@ -215,6 +240,9 @@ namespace Odyssey.Cyclops
                 return;
             }
 
+            testFight = testing;
+            savedMapCamera = mapCamera.enabled;
+            savedStory = story.enabled;
             savedMapTouch = mapTouch.enabled;
             savedArSession = arSession.enabled;
             savedArCamera = arOrigin.camera.enabled;
@@ -232,10 +260,11 @@ namespace Odyssey.Cyclops
             arOrigin.camera.enabled = true;
 
             activeFight = Instantiate(prefab, transform);
-            activeFight.Begin(arOrigin.camera, arOrigin.transform, Application.isEditor, ReturnToMap);
+            activeFight.Begin(arOrigin.camera, arOrigin.transform, Application.isEditor, CloseFight,
+                testing ? "Back to Title" : "Back to Map");
         }
 
-        private void ReturnToMap(bool won)
+        private void CloseFight(bool won)
         {
             if (activeFight == null)
                 return;
@@ -243,16 +272,76 @@ namespace Odyssey.Cyclops
             activeFight.gameObject.SetActive(false);
             Destroy(activeFight.gameObject);
             activeFight = null;
-            cleared = won;
-            gate = new CyclopsLocation();
+            if (!testFight)
+            {
+                cleared = won;
+                gate = new CyclopsLocation();
+            }
             arSession.enabled = savedArSession;
             arOrigin.camera.enabled = savedArCamera;
             storyCanvas.enabled = savedCanvas;
             if (storyRaycaster != null)
                 storyRaycaster.enabled = savedRaycaster;
-            mapCamera.enabled = true;
+            mapCamera.enabled = savedMapCamera;
             mapTouch.enabled = savedMapTouch;
-            story.enabled = true;
+            story.enabled = savedStory;
+        }
+
+        private void ConfigureTitleMenu()
+        {
+            if (title == null)
+                return;
+
+            Transform panel = title.transform;
+            Transform titleObject = panel.Find("Title_Text_1_1");
+            Transform search = panel.Find("SearchLocations_Button_1_2");
+            Transform next = panel.Find("Continue_Button_1_3");
+            if (titleObject == null || search == null || next == null)
+            {
+                Debug.LogWarning("Could not find the Return to Ithaca title controls.", this);
+                return;
+            }
+
+            var heading = titleObject.GetComponent<Text>();
+            heading.text = "Return to Ithaca";
+            heading.fontSize = 112;
+            heading.alignment = TextAnchor.MiddleCenter;
+            heading.raycastTarget = false;
+            heading.rectTransform.anchorMin = new Vector2(0.08f, 0.59f);
+            heading.rectTransform.anchorMax = new Vector2(0.92f, 0.85f);
+            heading.rectTransform.offsetMin = heading.rectTransform.offsetMax = Vector2.zero;
+
+            var start = search.GetComponent<Button>();
+            var startLabel = start.GetComponentInChildren<Text>(true);
+            startLabel.text = "Start Journey";
+            var startRect = (RectTransform)search;
+            startRect.anchorMin = startRect.anchorMax = new Vector2(0.5f, 0.33f);
+            startRect.anchoredPosition = Vector2.zero;
+            search.gameObject.SetActive(true);
+
+            continueJourney = next.GetComponent<Button>();
+            HideLegacyButton(next);
+            start.onClick.AddListener(() =>
+            {
+                journeyStarting = true;
+                testButton.gameObject.SetActive(false);
+            });
+
+            var testRect = CyclopsView.Place(panel, "Test Cyclops", new Vector2(0.5f, 0.33f),
+                new Vector2(0.5f, 0.5f), new Vector2(0, -125), new Vector2(450, 90));
+            testButton = CyclopsView.Button(testRect, "Test Cyclops", TestCyclops);
+            testButton.GetComponentInChildren<Text>().fontSize = 36;
+        }
+
+        private static void HideLegacyButton(Transform button)
+        {
+            if (button == null)
+                return;
+
+            var visibility = button.gameObject.AddComponent<CanvasGroup>();
+            visibility.alpha = 0;
+            visibility.interactable = false;
+            visibility.blocksRaycasts = false;
         }
 
         private void CreateMapHud()
