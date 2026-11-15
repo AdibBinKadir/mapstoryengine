@@ -1,5 +1,23 @@
 {
   "dependencies": {
+    "com.ibelongedtoyou.unity-mcp-2019": {
+      "version": "https://github.com/ibelongedtoyou/unity-mcp-2019.git#v0.3.1",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {
+        "com.unity.modules.animation": "1.0.0",
+        "com.unity.modules.audio": "1.0.0",
+        "com.unity.modules.imageconversion": "1.0.0",
+        "com.unity.modules.jsonserialize": "1.0.0",
+        "com.unity.modules.particlesystem": "1.0.0",
+        "com.unity.modules.physics": "1.0.0",
+        "com.unity.modules.physics2d": "1.0.0",
+        "com.unity.modules.screencapture": "1.0.0",
+        "com.unity.modules.uielements": "1.0.0",
+        "com.unity.test-framework": "1.1.24"
+      },
+      "hash": "679171b600b241078cbda8fac138049a34aa79b8"
+    },
     "com.unity.collab-proxy": {
       "version": "1.14.18",
       "depth": 0,

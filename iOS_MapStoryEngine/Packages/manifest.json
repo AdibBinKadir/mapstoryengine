@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.ibelongedtoyou.unity-mcp-2019": "https://github.com/ibelongedtoyou/unity-mcp-2019.git#v0.3.1",
     "com.unity.collab-proxy": "1.14.18",
     "com.unity.ext.nunit": "1.0.6",
     "com.unity.ide.rider": "1.2.1",
