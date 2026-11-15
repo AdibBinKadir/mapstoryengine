@@ -15,7 +15,12 @@ public class MedusaSandbox : MonoBehaviour
     void Awake()
     {
         encounter = GetComponent<MedusaEncounter>();
-        if (Services.Face == null)
+    }
+
+    // Start, not Awake: on the phone FaceTrackingServices registers the real face source first.
+    void Start()
+    {
+        if (Application.isEditor && Services.Face == null)
         {
             keyboard = gameObject.AddComponent<KeyboardFaceSignals>();
             Services.Face = keyboard;
@@ -73,13 +78,28 @@ public class MedusaSandbox : MonoBehaviour
         Debug.Log("[Sandbox] EncounterEnded " + type + " won=" + won);
     }
 
+    // IMGUI draws above Medusa's overlay canvas, so the buttons work mid-encounter (on the phone too).
     void OnGUI()
     {
+        int fontSize = Application.isMobilePlatform ? 32 : 14;
+        GUI.skin.label.fontSize = fontSize;
+        GUI.skin.button.fontSize = fontSize;
+
         IFaceSignals f = Services.Face;
         string face = f == null ? "face source: none" :
             "face=" + f.FaceFound + "  eyesClosed=" + f.EyesClosed + "  looking=" + f.LookingAtScreen;
-        GUI.Label(new Rect(10, 10, 900, 80),
+        var arFace = f as ARKitFaceSignals;
+        if (arFace != null) face += "  gaze=" + arFace.GazeAngle.ToString("0") + "°";
+        GUI.Label(new Rect(10, 10, Screen.width - 20, fontSize * 5),
             face + "\nanswerClues(C)=" + answerClues + "  abortOnKill(K)=" + abortOnKill +
             "  running=" + encounter.IsRunning + "\nB begin, A abort, F/E/L/M face keys");
+
+        float w = Application.isMobilePlatform ? 220f : 120f;
+        float h = Application.isMobilePlatform ? 110f : 40f;
+        float y = Screen.height - h - 20f;
+        if (GUI.Button(new Rect(10, y, w, h), "Begin")) encounter.Begin();
+        if (GUI.Button(new Rect(20 + w, y, w, h), "Abort")) encounter.Abort();
+        if (GUI.Button(new Rect(30 + 2 * w, y, w, h), "Clues: " + (answerClues ? "on" : "off"))) answerClues = !answerClues;
+        if (GUI.Button(new Rect(40 + 3 * w, y, w, h), "Abort on kill: " + (abortOnKill ? "on" : "off"))) abortOnKill = !abortOnKill;
     }
 }
