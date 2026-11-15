@@ -58,7 +58,7 @@ The Sphinx is one of the four encounters and a **Must** for the demo (PLAN §6: 
 ## Design
 
 ### Server (`server/`)
-- **Riddles:** a fixed list in `sphinx.py`, each `{question, answer, accept[]}` (e.g. the Sphinx's own "four legs in the morning…" → "man"/"a human"/"person"). Gemini rewords the question in her voice (validated: must not leak the answer, else the plain question is used) and judges spoken answers (the existing similarity + LLM check, with `accept[]` as extra spellings).
+- **Riddles:** a fixed list in `sphinx.py`, each `{question, answer, accept[]}` (e.g. the Sphinx's own "four legs in the morning…" → "man"/"a human"/"person"). The questions are pre-written in her voice (planning call: no leak risk, less latency); Gemini judges spoken answers (the existing similarity + LLM check, with `accept[]` as extra spellings).
 - **State from the phone** (extends `SphinxState`, additive): `riddle_index` (the id of the current riddle in the server's list, `-1` before the intro) and `correct_count` (0, 1). The **server picks** riddles at random (never the same one twice in an encounter); every reply that presents a riddle also returns its `riddle_index`, which the phone stores and echoes back. `riddle_answer` is no longer sent by the game; the server looks the answer up by index. (`riddle_answer` stays accepted for backwards compatibility with tests.)
 - **Turn outcomes in `/sphinx/talk`:**
   - Just talking → taunt + demand an answer.
