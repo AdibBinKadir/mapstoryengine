@@ -32,6 +32,8 @@ LLM_PLAUSIBLE = 0.7
 # Answers this short ("man", "egg") must be said exactly: fuzzy matching would accept "many" or "mean".
 SHORT_ANSWER = 4
 CORRECT_NEEDED = 2
+# Words inside accepted answers that are too common to count as leaking them ("your word", "human being").
+COMMON_WORDS = {"your", "my", "being", "people", "the", "a", "an"}
 
 # Written in her voice. Index 0 is her own riddle. Questions must never contain their answers.
 RIDDLES = [
@@ -163,7 +165,7 @@ def leaks_answer(text, accepted):
     if answer_similarity(text, accepted) >= SAYS_ANSWER:
         return True
     words = set(_words(text))
-    return any(len(w) >= 4 and w in words for a in accepted for w in _words(a))
+    return any(len(w) >= 4 and w not in COMMON_WORDS and w in words for a in accepted for w in _words(a))
 
 
 def _clean_line(line, accepted, allow_answer=False):

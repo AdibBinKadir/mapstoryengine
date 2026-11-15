@@ -217,3 +217,10 @@ def test_llm_leaves_time_for_her_voice(real_mode, monkeypatch):
 
 def test_default_model_is_the_fast_one():
     assert sphinx.DEFAULT_MODEL == "gemini-flash-lite-latest"
+
+
+def test_common_words_in_answers_are_not_leaks():
+    word = sphinx.answers(sphinx.RIDDLES[6])   # "your word", "my word", ...
+    assert not sphinx.leaks_answer("Your mind is as empty as your boat, sailor.", word)
+    assert sphinx.leaks_answer("Keep your word, sailor.", word)
+    assert not sphinx.leaks_answer("Being this slow must be exhausting.", sphinx.answers(sphinx.RIDDLES[0]))
